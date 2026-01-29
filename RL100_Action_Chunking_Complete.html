@@ -1020,13 +1020,8 @@ Q(s_0, a_0="缓慢伸手") ← 0.78 + γ³ * Q(s_3, "快速放下")
                     </div>
 
                     <div class="math-block">
-                        <p><strong>传统单步Q:</strong></p>
-                        \[Q(s_t, a_t)\]
-                        <p>评估：在\(s_t\)执行\(a_t\)的价值</p>
-                        <br>
-                        <p><strong>Chunked Q:</strong></p>
-                        \[Q(s_t, a_{t:t+h})\]
-                        <p>评估：在\(s_t\)执行连续h个actions的价值</p>
+                        \[\text{传统单步Q: } Q(s_t, a_t) \text{ # 评估：在}s_t\text{执行}a_t\text{的价值}\]
+                        \[\text{Chunked Q: } Q(s_t, a_{t:t+h}) \text{ # 评估：在}s_t\text{执行连续h个actions的价值}\]
                     </div>
 
                     <h3>为什么这样能消除bias？</h3>
@@ -1194,17 +1189,16 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                                 V(s_h)]\]
                                 <br>
                                 \[V(s_0) = \mathbb{E}[r_0 + \gamma r_1 + ... + \gamma^{h-1} r_{h-1} + \gamma^h V(s_h)]\]
-                                <p>(这里的actions来自policy \(\pi\))</p>
+                                \[\text{(这里的actions来自policy } \pi\text{)}\]
                                 <br>
-                                \[A(s_0, a_{0:h}) = Q(s_0, a_{0:h}) - V(s_0)\]
+                                \[A(s_0, a_{0:h}) = Q(s_0, a_{0:h}) - V(s_0) = \mathbb{E}[\text{所有h步的差异}]\]
                             </div>
 
                             <p><strong>分解一下</strong>：</p>
                             <div class="math-block">
                                 \[Q(s_0, a_{0:h}) - V(s_0)\]
-                                <br>
-                                \[= \mathbb{E}[\sum \gamma^t r_t | a_{0:h}] - \mathbb{E}[\sum \gamma^t r_t | \pi]\]
-                                <p>= "这个特定chunk相比policy的h-step优势"</p>
+                                \[= [\sum \gamma^t r_t | a_{0:h}\text{固定}] - [\sum \gamma^t r_t | \text{actions} \sim \pi]\]
+                                \[= \text{"这个特定chunk相比policy的h-step优势"}\]
                             </div>
                         </div>
                     </div>
@@ -1293,9 +1287,8 @@ A = Q - V = "你的chunk vs policy的默认行为，谁更好？"</code></pre>
                     <div class="highlight-box warning">
                         <h4>Q-Chunking的设定</h4>
                         <div class="math-block">
-                            <p>policy chunk size = critic chunk size</p>
-                            \[h_a = h = 5\]
-                            <p>(例如)</p>
+                            \[\text{policy chunk size} = \text{critic chunk size}\]
+                            \[h_a = h = 5 \text{ (例如)}\]
                         </div>
                     </div>
 
@@ -1364,9 +1357,8 @@ Q_full(s, a_{0:25})
 
                     <div class="highlight-box primary">
                         <h4>直观理解</h4>
-                        <p>"执行这5步后，乐观地完成后20步，能得到的最好价值"</p>
                         <div class="math-block">
-                            \[Q_{\text{partial}}(s, a_{0:5})\]
+                            \[Q_{\text{partial}}(s, \text{"前5步"}) = \text{"执行这5步后，乐观地完成后20步，能得到的最好价值"}\]
                         </div>
                     </div>
 
@@ -1604,30 +1596,24 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
 
                             <h4>证明思路</h4>
 
-                            <p><strong>1. 分解bias</strong>：</p>
                             <div class="math-block">
-                                \[V^{ac} - \hat{V}^{ac} = \mathbb{E}[\sum_{k=0}^\infty \gamma^k (r_k - \hat{r}_k)]\]
-                            </div>
+                                <p>1. <strong>分解bias</strong>：</p>
+                                \[V^{ac} - \hat{V}^{ac} = \mathbb{E}[\sum_{k=0}^\infty \gamma^k (r_k^{\text{真实}} - r_k^{\text{估计}})]\]
 
-                            <p><strong>2. 每个chunk的bias</strong>：</p>
-                            <div class="math-block">
-                                \[|\mathbb{E}[r_k] - \mathbb{E}[\hat{r}_k]| \leq R_{\max} \cdot \epsilon_h\]
-                            </div>
+                                <p>2. <strong>每个chunk的bias</strong>：</p>
+                                \[|\mathbb{E}[r_k^{\text{真实}}] - \mathbb{E}[r_k^{\text{估计}}]| \leq R_{\max} \cdot \epsilon_h\]
 
-                            <p><strong>3. 累积所有chunks</strong>：</p>
-                            <div class="math-block">
-                                \[\text{Bias} \leq \sum_{i=0}^{\infty} \gamma^{h \cdot i} \cdot R_{\max} \cdot \epsilon_h\]
+                                <p>3. <strong>累积所有chunks</strong>：</p>
+                                \[\text{总bias} \leq \sum_{\text{chunk}} \gamma^{h \cdot \text{chunk}} \cdot R_{\max} \cdot \epsilon_h\]
                                 \[= R_{\max} \cdot \epsilon_h \cdot (1 + \gamma^h + \gamma^{2h} + ...)\]
                                 \[= R_{\max} \cdot \epsilon_h / (1-\gamma^h)\]
                                 \[= R_{\max} \cdot \epsilon_h \cdot \bar{H}\]
-                            </div>
 
-                            <p><strong>4. 考虑整个episode</strong>：</p>
-                            <div class="math-block">
+                                <p>4. <strong>考虑整个episode</strong>：</p>
                                 \[|V - \hat{V}| \leq H \cdot (R_{\max} \cdot \epsilon_h \cdot \bar{H}) = \epsilon_h \cdot H \cdot \bar{H}\]
-                            </div>
 
-                            <p>∎</p>
+                                <p>∎</p>
+                            </div>
                         </div>
                     </div>
                 </section>
