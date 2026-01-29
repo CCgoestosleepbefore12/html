@@ -1019,10 +1019,17 @@ Q(s_0, a_0="缓慢伸手") ← 0.78 + γ³ * Q(s_3, "快速放下")
                         <p>让Q函数直接评估"一段action sequence"，而不是单个action。</p>
                     </div>
 
+                    <p><strong>传统单步Q:</strong></p>
                     <div class="math-block">
-                        \[\text{传统单步Q: } Q(s_t, a_t) \text{ # 评估：在}s_t\text{执行}a_t\text{的价值}\]
-                        \[\text{Chunked Q: } Q(s_t, a_{t:t+h}) \text{ # 评估：在}s_t\text{执行连续h个actions的价值}\]
+                        \[Q(s_t, a_t)\]
                     </div>
+                    <p>评估：在\(s_t\)执行\(a_t\)的价值</p>
+
+                    <p><strong>Chunked Q:</strong></p>
+                    <div class="math-block">
+                        \[Q(s_t, a_{t:t+h})\]
+                    </div>
+                    <p>评估：在\(s_t\)执行连续h个actions的价值</p>
 
                     <h3>为什么这样能消除bias？</h3>
 
@@ -1082,14 +1089,14 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                     <div class="highlight-box success">
                         <h4><span class="icon">✓</span> 为什么无bias？</h4>
                         <p>因为：</p>
+                        <p><strong>\(Q(s_0, a_{0:n})\) 的定义就是：</strong></p>
+                        <p>"从\(s_0\)开始，执行\(a_0, a_1, ..., a_{n-1}\)，然后评估后续价值"</p>
+                        <p>而 \(G_n\) 正是执行这些actions得到的实际return！</p>
+                        <p><strong>所以：</strong></p>
                         <div class="math-block">
-                            \[Q(s_0, a_{0:n}) \text{ 的定义就是：}\]
-                            \[\text{"从}s_0\text{开始，执行}a_0, a_1, ..., a_{n-1}\text{，然后评估后续价值"}\]
-                            <br>
-                            \[\text{而 } G_n \text{ 正是执行这些actions得到的实际return！}\]
-                            <br>
-                            \[\text{所以：}\mathbb{E}[G_n | s_0, a_{0:n}] \text{ 就是}Q(s_0, a_{0:n})\text{的unbiased估计}\]
+                            \[\mathbb{E}[G_n | s_0, a_{0:n}] = Q(s_0, a_{0:n})\]
                         </div>
+                        <p>这是unbiased估计</p>
                     </div>
 
                     <h3>直观理解：整体评估 vs 局部评估</h3>
@@ -1097,15 +1104,17 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                     <div class="comparison-container">
                         <div class="comparison-box left">
                             <h4>传统Q函数（局部）</h4>
+                            <p>"我只看第一步action \(a\)，然后假设后续按某个policy走"</p>
                             <div class="math-block">
-                                \[Q(s, a) = \text{"我只看第一步action } a\text{，然后假设后续按某个policy走"}\]
+                                \[Q(s, a)\]
                             </div>
                         </div>
 
                         <div class="comparison-box right">
                             <h4>Chunked Q函数（整体）</h4>
+                            <p>"我看整个h步action sequence，直接评估这个sequence的价值"</p>
                             <div class="math-block">
-                                \[Q(s, a_{0:h}) = \text{"我看整个h步action sequence，直接评估这个sequence的价值"}\]
+                                \[Q(s, a_{0:h})\]
                             </div>
                         </div>
                     </div>
@@ -1145,9 +1154,11 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                         <h4><span class="icon">🤔</span> 很多人看到action chunking后会想</h4>
                         <p>"既然我用h-step actions，<br>
                         是不是也需要h-step advantage？"</p>
+                        <p>比如：</p>
                         <div class="math-block">
-                            \[A_h(s, a_{0:h}) = \sum \gamma^t (r_t - V(s_t)) \text{  # h步advantage？}\]
+                            \[A_h(s, a_{0:h}) = \sum \gamma^t (r_t - V(s_t))\]
                         </div>
+                        <p>h步advantage？</p>
                     </div>
 
                     <div class="highlight-box success">
@@ -1182,21 +1193,20 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                         <div class="collapsible-content">
                             <p>让我们展开Q函数：</p>
                             <div class="math-block">
-                                \[Q(s_0, a_{0:h}) = \mathbb{E}[r_0 + \gamma r_1 + ... + \gamma^{h-1} r_{h-1} + \gamma^h
-                                V(s_h)]\]
+                                \[Q(s_0, a_{0:h}) = \mathbb{E}[r_0 + \gamma r_1 + ... + \gamma^{h-1} r_{h-1} + \gamma^h V(s_h)]\]
                                 <br>
                                 \[V(s_0) = \mathbb{E}[r_0 + \gamma r_1 + ... + \gamma^{h-1} r_{h-1} + \gamma^h V(s_h)]\]
-                                \[\text{(这里的actions来自policy } \pi\text{)}\]
-                                <br>
-                                \[A(s_0, a_{0:h}) = Q(s_0, a_{0:h}) - V(s_0) = \mathbb{E}[\text{所有h步的差异}]\]
+                            </div>
+                            <p>(这里的actions来自policy \(\pi\))</p>
+                            <div class="math-block">
+                                \[A(s_0, a_{0:h}) = Q(s_0, a_{0:h}) - V(s_0)\]
                             </div>
 
                             <p><strong>分解一下</strong>：</p>
                             <div class="math-block">
-                                \[Q(s_0, a_{0:h}) - V(s_0)\]
-                                \[= [\sum \gamma^t r_t | a_{0:h}\text{固定}] - [\sum \gamma^t r_t | \text{actions} \sim \pi]\]
-                                \[= \text{"这个特定chunk相比policy的h-step优势"}\]
+                                \[Q(s_0, a_{0:h}) - V(s_0) = \mathbb{E}[\sum \gamma^t r_t | a_{0:h}] - \mathbb{E}[\sum \gamma^t r_t | \pi]\]
                             </div>
+                            <p>= "这个特定chunk相比policy的h-step优势"</p>
                         </div>
                     </div>
 
@@ -1283,10 +1293,11 @@ A = Q - V = "你的chunk vs policy的默认行为，谁更好？"</code></pre>
 
                     <div class="highlight-box warning">
                         <h4>Q-Chunking的设定</h4>
+                        <p>policy chunk size = critic chunk size</p>
                         <div class="math-block">
-                            \[\text{policy chunk size} = \text{critic chunk size}\]
-                            \[h_a = h = 5 \text{ (例如)}\]
+                            \[h_a = h = 5\]
                         </div>
+                        <p>(例如)</p>
                     </div>
 
                     <h4>问题1：长horizon任务效率低</h4>
@@ -1354,8 +1365,9 @@ Q_full(s, a_{0:25})
 
                     <div class="highlight-box primary">
                         <h4>直观理解</h4>
+                        <p>"执行前5步后，乐观地完成后20步，能得到的最好价值"</p>
                         <div class="math-block">
-                            \[Q_{\text{partial}}(s, \text{"前5步"}) = \text{"执行这5步后，乐观地完成后20步，能得到的最好价值"}\]
+                            \[Q_{\text{partial}}(s, a_{0:5})\]
                         </div>
                     </div>
 
@@ -1506,8 +1518,9 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
 
                                 <p><strong>Consistency</strong>：</p>
                                 <div class="math-block">
-                                    \[P(s_n | s_0, a_{0:n}) = P(s_n | s_0, a_0, ..., a_{n-1}) \text{  # 确定的}\]
+                                    \[P(s_n | s_0, a_{0:n}) = P(s_n | s_0, a_0, ..., a_{n-1})\]
                                 </div>
+                                <p>(确定的)</p>
 
                                 <p><strong>Bellman equation满足</strong>：</p>
                                 <div class="math-block">
@@ -1591,24 +1604,29 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
 
                             <h4>证明思路</h4>
 
+                            <p><strong>1. 分解bias</strong>：</p>
                             <div class="math-block">
-                                <p>1. <strong>分解bias</strong>：</p>
-                                \[V^{ac} - \hat{V}^{ac} = \mathbb{E}[\sum_{k=0}^\infty \gamma^k (r_k^{\text{真实}} - r_k^{\text{估计}})]\]
-
-                                <p>2. <strong>每个chunk的bias</strong>：</p>
-                                \[|\mathbb{E}[r_k^{\text{真实}}] - \mathbb{E}[r_k^{\text{估计}}]| \leq R_{\max} \cdot \epsilon_h\]
-
-                                <p>3. <strong>累积所有chunks</strong>：</p>
-                                \[\text{总bias} \leq \sum_{\text{chunk}} \gamma^{h \cdot \text{chunk}} \cdot R_{\max} \cdot \epsilon_h\]
-                                \[= R_{\max} \cdot \epsilon_h \cdot (1 + \gamma^h + \gamma^{2h} + ...)\]
-                                \[= R_{\max} \cdot \epsilon_h / (1-\gamma^h)\]
-                                \[= R_{\max} \cdot \epsilon_h \cdot \bar{H}\]
-
-                                <p>4. <strong>考虑整个episode</strong>：</p>
-                                \[|V - \hat{V}| \leq H \cdot (R_{\max} \cdot \epsilon_h \cdot \bar{H}) = \epsilon_h \cdot H \cdot \bar{H}\]
-
-                                <p>∎</p>
+                                \[V^{ac} - \hat{V}^{ac} = \mathbb{E}[\sum_{k=0}^\infty \gamma^k (r_k - \hat{r}_k)]\]
                             </div>
+
+                            <p><strong>2. 每个chunk的bias</strong>：</p>
+                            <div class="math-block">
+                                \[|\mathbb{E}[r_k] - \mathbb{E}[\hat{r}_k]| \leq R_{\max} \cdot \epsilon_h\]
+                            </div>
+
+                            <p><strong>3. 累积所有chunks</strong>：</p>
+                            <div class="math-block">
+                                \[\text{Bias} \leq \sum_{i} \gamma^{h \cdot i} \cdot R_{\max} \cdot \epsilon_h\]
+                                \[= R_{\max} \cdot \epsilon_h \cdot (1 + \gamma^h + \gamma^{2h} + ...)\]
+                                \[= R_{\max} \cdot \epsilon_h / (1-\gamma^h) = R_{\max} \cdot \epsilon_h \cdot \bar{H}\]
+                            </div>
+
+                            <p><strong>4. 考虑整个episode</strong>：</p>
+                            <div class="math-block">
+                                \[|V - \hat{V}| \leq H \cdot (R_{\max} \cdot \epsilon_h \cdot \bar{H}) = \epsilon_h \cdot H \cdot \bar{H}\]
+                            </div>
+
+                            <p>∎</p>
                         </div>
                     </div>
                 </section>
