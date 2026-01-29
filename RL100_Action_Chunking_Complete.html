@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RL-100与Action Chunking</title>
+    <title>RL-100与Action Chunking完整指南</title>
 
-    <!-- MathJax for math formulas -->
+    <!-- MathJax Configuration -->
     <script>
         MathJax = {
             tex: {
@@ -173,7 +173,7 @@
             flex: 1;
             margin-left: var(--sidebar-width);
             padding: 3rem;
-            max-width: 1800px;
+            max-width: 1400px;
         }
 
         /* Section Markers */
@@ -928,6 +928,7 @@ s_0 --[a_0]--> s_1 --[a_1]--> s_2 --[a_2]--> ... --[a_{n-1}]--> s_n
                                 <li><strong>时间不一致</strong>：用"未来的某个action"来bootstrap"过去的trajectory"</li>
                             </ul>
                             <div class="math-block">
+                                <p>数学上的bias：</p>
                                 \[\mathbb{E}[Q(s_n, a_n)] \neq \mathbb{E}_{a \sim \pi}[Q(s_n, a)]\]
                                 <p>因为 \(a_n \sim \beta(\cdot|s_n)\), 不是 \(\pi(\cdot|s_n)\)</p>
                             </div>
@@ -1016,10 +1017,16 @@ Q(s_0, a_0="缓慢伸手") ← 0.78 + γ³ * Q(s_3, "快速放下")
                     <div class="highlight-box success">
                         <h4><span class="icon">💡</span> 关键想法</h4>
                         <p>让Q函数直接评估"一段action sequence"，而不是单个action。</p>
-                        <div class="math-block">
-                            \[\text{传统单步Q: } Q(s_t, a_t) \text{ # 评估：在}s_t\text{执行}a_t\text{的价值}\]
-                            \[\text{Chunked Q: } Q(s_t, a_{t:t+h}) \text{ # 评估：在}s_t\text{执行连续h个actions的价值}\]
-                        </div>
+                    </div>
+
+                    <div class="math-block">
+                        <p><strong>传统单步Q:</strong></p>
+                        \[Q(s_t, a_t)\]
+                        <p>评估：在\(s_t\)执行\(a_t\)的价值</p>
+                        <br>
+                        <p><strong>Chunked Q:</strong></p>
+                        \[Q(s_t, a_{t:t+h})\]
+                        <p>评估：在\(s_t\)执行连续h个actions的价值</p>
                     </div>
 
                     <h3>为什么这样能消除bias？</h3>
@@ -1081,12 +1088,12 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                         <h4><span class="icon">✓</span> 为什么无bias？</h4>
                         <p>因为：</p>
                         <div class="math-block">
-                            \[Q(s_0, a_{0:n}) \text{ 的定义就是：}\]
-                            \[\text{"从}s_0\text{开始，执行}a_0, a_1, ..., a_{n-1}\text{，然后评估后续价值"}\]
+                            \[Q(s_0, a_{0:n})\]
+                            <p>的定义就是："从\(s_0\)开始，执行\(a_0, a_1, ..., a_{n-1}\)，然后评估后续价值"</p>
                             <br>
-                            \[\text{而 } G_n \text{ 正是执行这些actions得到的实际return！}\]
+                            <p>而 \(G_n\) 正是执行这些actions得到的实际return！</p>
                             <br>
-                            \[\text{所以：}\mathbb{E}[G_n | s_0, a_{0:n}] \text{ 就是}Q(s_0, a_{0:n})\text{的unbiased估计}\]
+                            <p>所以：\(\mathbb{E}[G_n | s_0, a_{0:n}]\) 就是\(Q(s_0, a_{0:n})\)的unbiased估计</p>
                         </div>
                     </div>
 
@@ -1095,15 +1102,17 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                     <div class="comparison-container">
                         <div class="comparison-box left">
                             <h4>传统Q函数（局部）</h4>
+                            <p>"我只看第一步action a，然后假设后续按某个policy走"</p>
                             <div class="math-block">
-                                \[Q(s, a) = \text{"我只看第一步action } a\text{，然后假设后续按某个policy走"}\]
+                                \[Q(s, a)\]
                             </div>
                         </div>
 
                         <div class="comparison-box right">
                             <h4>Chunked Q函数（整体）</h4>
+                            <p>"我看整个h步action sequence，直接评估这个sequence的价值"</p>
                             <div class="math-block">
-                                \[Q(s, a_{0:h}) = \text{"我看整个h步action sequence，直接评估这个sequence的价值"}\]
+                                \[Q(s, a_{0:h})\]
                             </div>
                         </div>
                     </div>
@@ -1141,10 +1150,11 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
 
                     <div class="highlight-box warning">
                         <h4><span class="icon">🤔</span> 很多人看到action chunking后会想</h4>
-                        <p>"既然我用h-step actions，<br>
-                            是不是也需要h-step advantage？"</p>
+                        <p>"既然我用h-step actions，是不是也需要h-step advantage？"</p>
                         <div class="math-block">
-                            \[A_h(s, a_{0:h}) = \sum \gamma^t (r_t - V(s_t)) \text{ # h步advantage？}\]
+                            <p>比如：</p>
+                            \[A_h(s, a_{0:h}) = \sum \gamma^t (r_t - V(s_t))\]
+                            <p>h步advantage？</p>
                         </div>
                     </div>
 
@@ -1184,7 +1194,7 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                                 V(s_h)]\]
                                 <br>
                                 \[V(s_0) = \mathbb{E}[r_0 + \gamma r_1 + ... + \gamma^{h-1} r_{h-1} + \gamma^h V(s_h)]\]
-                                \[\text{(这里的actions来自policy } \pi\text{)}\]
+                                <p>(这里的actions来自policy \(\pi\))</p>
                                 <br>
                                 \[A(s_0, a_{0:h}) = Q(s_0, a_{0:h}) - V(s_0) = \mathbb{E}[\text{所有h步的差异}]\]
                             </div>
@@ -1192,9 +1202,10 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                             <p><strong>分解一下</strong>：</p>
                             <div class="math-block">
                                 \[Q(s_0, a_{0:h}) - V(s_0)\]
+                                <br>
                                 \[= [\sum \gamma^t r_t | a_{0:h}\text{固定}] - [\sum \gamma^t r_t | \text{actions} \sim
                                 \pi]\]
-                                \[= \text{"这个特定chunk相比policy的h-step优势"}\]
+                                <p>= "这个特定chunk相比policy的h-step优势"</p>
                             </div>
                         </div>
                     </div>
@@ -1283,7 +1294,7 @@ A = Q - V = "你的chunk vs policy的默认行为，谁更好？"</code></pre>
                     <div class="highlight-box warning">
                         <h4>Q-Chunking的设定</h4>
                         <div class="math-block">
-                            \[\text{policy chunk size} = \text{critic chunk size}\]
+                            <p>policy chunk size = critic chunk size</p>
                             \[h_a = h = 5 \text{ (例如)}\]
                         </div>
                     </div>
@@ -1300,11 +1311,11 @@ for step in range(0, 500, 5):
 
                     <div class="highlight-box success">
                         <h4>如果能用更大的critic chunk (h=25)</h4>
-                        <pre><code class="language-python"># critic可以"看得更远"，一次bootstrap 25步
-Q(s_t, a_{t:t+25}) = Σγᵏr_k + γ²⁵*Q(s_{t+25}, ...)
-#                      ↑
-#                   25步的rewards
-#                   更高效的value learning</code></pre>
+                        <pre><code class="language-python"># critic可以"看得更远"，一次bootstrap 25步</code></pre>
+                        <div class="math-block">
+                            \[Q(s_t, a_{t:t+25}) = \sum \gamma^k r_k + \gamma^{25} Q(s_{t+25}, ...)\]
+                            <p>25步的rewards，更高效的value learning</p>
+                        </div>
                     </div>
 
                     <h4>问题2：Policy reactivity不足</h4>
@@ -1353,9 +1364,7 @@ Q_full(s, a_{0:25})
 
                     <div class="highlight-box primary">
                         <h4>直观理解</h4>
-                        <div class="math-block">
-                            \[Q_{\text{partial}}(s, \text{"前5步"}) = \text{"执行这5步后，乐观地完成后20步，能得到的最好价值"}\]
-                        </div>
+                        <p>\(Q_{\text{partial}}(s, \text{"前5步"}) = \)"执行这5步后，乐观地完成后20步，能得到的最好价值"</p>
                     </div>
 
                     <h3>为什么用Expectile Regression而非Max？</h3>
@@ -1407,9 +1416,10 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
                             <div class="highlight-box primary">
                                 <h4>为什么有效？</h4>
                                 <div class="math-block">
-                                    \[\max Q \approx \mathbb{E}_{\kappa \to 1}[Q] \text{ # 当κ接近1，expectile接近max}\]
+                                    \[\max Q \approx \mathbb{E}_{\kappa \to 1}[Q]\]
+                                    <p>当κ接近1，expectile接近max</p>
                                     <br>
-                                    \[\text{κ=0.8是一个平衡：}\]
+                                    <p>κ=0.8是一个平衡：</p>
                                     <ul>
                                         <li>足够optimistic（接近max）</li>
                                         <li>但不会对outliers过拟合</li>
@@ -1504,7 +1514,8 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
 
                                 <p><strong>Consistency</strong>：</p>
                                 <div class="math-block">
-                                    \[P(s_n | s_0, a_{0:n}) = P(s_n | s_0, a_0, ..., a_{n-1}) \text{ # 确定的}\]
+                                    \[P(s_n | s_0, a_{0:n}) = P(s_n | s_0, a_0, ..., a_{n-1})\]
+                                    <p>(确定的)</p>
                                 </div>
 
                                 <p><strong>Bellman equation满足</strong>：</p>
@@ -1558,7 +1569,7 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
 
                             <div class="math-block">
                                 <p><strong>Open-loop consistency</strong> (Definition 2):</p>
-                                <p>Dataset \(D\) 是 \(\epsilon_h\text{-open-loop consistent}\) 如果：</p>
+                                <p>Dataset \(D\) 是 \(\epsilon_h\)-open-loop consistent 如果：</p>
                                 \[D_{TV}(P^D(s_{t+h} | s_t) \| P^D_\circ(s_{t+h} | s_t)) \leq \epsilon_h\]
 
                                 <p>其中：</p>
@@ -1570,15 +1581,13 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
 
                             <div class="highlight-box primary">
                                 <h4>直观理解</h4>
-                                <p>"如果我在\(s_t\)规划h步actions，<br>
-                                    h步后到达的状态\(s_{t+h}\)的分布，<br>
-                                    应该接近dataset中'h步后'的状态分布"</p>
+                                <p>"如果我在\(s_t\)规划h步actions，h步后到达的状态\(s_{t+h}\)的分布，应该接近dataset中'h步后'的状态分布"</p>
                             </div>
 
                             <h4>定理陈述</h4>
 
                             <div class="math-block">
-                                <p>如果dataset是\(\epsilon_h\text{-open-loop consistent}\)，那么：</p>
+                                <p>如果dataset是\(\epsilon_h\)-open-loop consistent，那么：</p>
                                 \[|V^{ac}(s_t) - \hat{V}^{ac}(s_t)| \leq \epsilon_h \cdot H \cdot \bar{H}\]
 
                                 <p>其中：</p>
@@ -1716,13 +1725,14 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
             hljs.highlightAll();
         });
 
-        // Smooth scrolling and active TOC link
-        document.querySelectorAll('.toc-link').forEach(link => {
-            link.addEventListener('click', function (e) {
+        // Smooth scrolling for TOC links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
                 e.preventDefault();
-                const targetId = this.getAttribute('href').substring(1);
-                const targetElement = document.getElementById(targetId);
+                const targetId = this.getAttribute('href');
+                if (targetId === '#') return;
 
+                const targetElement = document.querySelector(targetId);
                 if (targetElement) {
                     const headerOffset = 100;
                     const elementPosition = targetElement.getBoundingClientRect().top;
@@ -1732,37 +1742,45 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
                         top: offsetPosition,
                         behavior: 'smooth'
                     });
-                }
 
-                // Update active link
-                document.querySelectorAll('.toc-link').forEach(l => l.classList.remove('active'));
-                this.classList.add('active');
+                    // Update active link
+                    document.querySelectorAll('.toc-link').forEach(link => {
+                        link.classList.remove('active');
+                    });
+                    if (this.classList.contains('toc-link')) {
+                        this.classList.add('active');
+                    }
 
-                // Close mobile menu
-                if (window.innerWidth <= 768) {
-                    document.getElementById('sidebar').classList.remove('mobile-open');
+                    // Close mobile menu
+                    if (window.innerWidth <= 768) {
+                        document.getElementById('sidebar').classList.remove('mobile-open');
+                    }
                 }
             });
         });
 
         // Update active TOC link on scroll
+        let scrollTimeout;
         window.addEventListener('scroll', () => {
-            const sections = document.querySelectorAll('section[id]');
-            let currentSection = '';
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                const sections = document.querySelectorAll('section[id]');
+                let currentSection = '';
 
-            sections.forEach(section => {
-                const sectionTop = section.offsetTop - 150;
-                if (window.pageYOffset >= sectionTop) {
-                    currentSection = section.getAttribute('id');
-                }
-            });
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop - 150;
+                    if (window.pageYOffset >= sectionTop) {
+                        currentSection = section.getAttribute('id');
+                    }
+                });
 
-            document.querySelectorAll('.toc-link').forEach(link => {
-                link.classList.remove('active');
-                if (link.getAttribute('href') === '#' + currentSection) {
-                    link.classList.add('active');
-                }
-            });
+                document.querySelectorAll('.toc-link').forEach(link => {
+                    link.classList.remove('active');
+                    if (link.getAttribute('href') === '#' + currentSection) {
+                        link.classList.add('active');
+                    }
+                });
+            }, 100);
         });
 
         // Collapsible sections
