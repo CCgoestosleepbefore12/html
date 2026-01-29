@@ -868,18 +868,12 @@ loss_q_guidance = -q_value.mean()</code></pre>
             <hr style="margin: 4rem 0; border-width: 3px;">
 
             <!-- ============================================ -->
-            <!-- PART 3: 深度理论分析 -->
-            <!-- ============================================ -->
-            <section id="part3">
-                <h1 class="part-title">Part 3: 深度理论分析</h1>
+                <h2>核心问题：Off-policy Bias的本质</h2>
 
-                <section id="part3-bias">
-                    <h2>3.1 核心问题：Off-policy Bias的本质</h2>
+                <h3>问题场景</h3>
+                <p>想象你在训练一个机器人操作任务：</p>
 
-                    <h3>问题场景</h3>
-                    <p>想象你在训练一个机器人操作任务：</p>
-
-                    <pre><code class="language-python"># 你有一个offline dataset
+                <pre><code class="language-python"># 你有一个offline dataset
 dataset = [
     (s_0, a_0, r_0, s_1),
     (s_1, a_1, r_1, s_2),
@@ -893,74 +887,82 @@ a_0, a_1, a_2, ... ~ β(·|s)
 # 但你想训练一个新的target policy π
 π(·|s)  # 可能和β很不一样！</code></pre>
 
-                    <h3>传统n-step TD的问题</h3>
+                <h3>传统n-step TD的问题</h3>
 
-                    <div class="highlight-box primary">
-                        <h4><span class="icon">📊</span> 标准n-step Q-learning更新</h4>
-                        <pre><code class="language-python"># 用dataset中的前n步rewards
+                <div class="highlight-box primary">
+                    <h4><span class="icon">📊</span> 标准n-step Q-learning更新</h4>
+                    <pre><code class="language-python"># 用dataset中的前n步rewards
 G_n = r_0 + γ*r_1 + γ²*r_2 + ... + γⁿ⁻¹*r_(n-1)
 
 # Bootstrap from step n
 Q(s_0, a_0) ← G_n + γⁿ * Q(s_n, a_n)</code></pre>
-                    </div>
+                </div>
 
-                    <div class="highlight-box danger">
-                        <h4><span class="icon">⚠️</span> 问题在哪？</h4>
-                        <p>让我们逐步分解这个更新：</p>
-                        <pre><code class="language-python"># Step 1-n: 从dataset执行actions
-s_0 --[a_0]--> s_1 --[a_1]--> s_2 --[a_2]--> ... --[a_{n-1}]--> s_n
+                <div class="highlight-box danger">
+                    <h4><span class="icon">⚠️</span> 问题在哪？</h4>
+                    <p>让我们逐步分解这个更新：</p>
+                    <pre><code class="language-python"># Step 1: 从s_0执行a_0（来自dataset）
+s_0 --[a_0]--> s_1  # 得到 r_0
+
+# Step 2: 从s_1执行a_1（来自dataset）
+s_1 --[a_1]--> s_2  # 得到 r_1
+
+# Step 3: 从s_2执行a_2（来自dataset）
+s_2 --[a_2]--> s_3  # 得到 r_2
+
+# ...
 
 # Step n: Bootstrap from s_n
 # ⚠️ 关键问题：用什么action来估计Q(s_n, ?)？</code></pre>
+                </div>
+
+                <h4>两种选择，都有问题</h4>
+
+                <div class="comparison-container">
+                    <div class="comparison-box left">
+                        <h4><span class="icon">❌</span> 选择1：用dataset中的下一个action</h4>
+                        <div class="math-block">
+                            \[Q(s_0, a_0) \leftarrow \sum \gamma^i r_i + \gamma^n \cdot Q(s_n, a_n)\]
+                        </div>
+                        <p><strong>问题</strong>：</p>
+                        <ul>
+                            <li><code>a_n</code>是behavior policy β在时刻n选择的action</li>
+                            <li>但<code>r_0, r_1, ..., r_(n-1)</code>是时刻0-n的rewards</li>
+                            <li><strong>时间不一致</strong>：你在用"未来的某个action"来bootstrap"过去的trajectory"</li>
+                        </ul>
+                        <div class="math-block">
+                            \[\mathbb{E}[Q(s_n, a_n)] \neq \mathbb{E}_{a \sim \pi}[Q(s_n, a)]\]
+                            <p>因为 \(a_n \sim \beta(\cdot|s_n)\), 不是 \(\pi(\cdot|s_n)\)</p>
+                        </div>
                     </div>
 
-                    <h4>两种选择，都有问题</h4>
-
-                    <div class="comparison-container">
-                        <div class="comparison-box left">
-                            <h4><span class="icon">❌</span> 选择1：用dataset中的下一个action</h4>
-                            <div class="math-block">
-                                \[Q(s_0, a_0) \leftarrow \sum \gamma^i r_i + \gamma^n \cdot Q(s_n, a_n)\]
-                            </div>
-                            <p><strong>问题</strong>：</p>
-                            <ul>
-                                <li><code>a_n</code>是behavior policy β在时刻n选择的action</li>
-                                <li><strong>时间不一致</strong>：用"未来的某个action"来bootstrap"过去的trajectory"</li>
-                            </ul>
-                            <div class="math-block">
-                                <p>数学上的bias：</p>
-                                \[\mathbb{E}[Q(s_n, a_n)] \neq \mathbb{E}_{a \sim \pi}[Q(s_n, a)]\]
-                                <p>因为 \(a_n \sim \beta(\cdot|s_n)\), 不是 \(\pi(\cdot|s_n)\)</p>
-                            </div>
-                        </div>
-
-                        <div class="comparison-box left">
-                            <h4><span class="icon">❌</span> 选择2：用当前policy π采样新action</h4>
-                            <pre><code class="language-python">a_new ~ π(·|s_n)
+                    <div class="comparison-box left">
+                        <h4><span class="icon">❌</span> 选择2：用当前policy π采样新action</h4>
+                        <pre><code class="language-python">a_new ~ π(·|s_n)  # 从当前policy采样
 Q(s_0, a_0) ← Σγⁱr_i + γⁿ * Q(s_n, a_new)</code></pre>
-                            <p><strong>问题更严重</strong>：</p>
-                            <ul>
-                                <li><code>s_n</code>是由β产生的</li>
-                                <li>但用π的action来估计</li>
-                                <li><strong>Counterfactual reasoning错误</strong>：假设"如果用π，会到达同样的s_n"</li>
-                            </ul>
-                            <div class="highlight-box danger">
-                                <h4>Off-policy分布不匹配</h4>
-                                <p>\(s_n\) 是由 β 生成的轨迹到达的状态<br>
-                                    但你用 \(\pi(\cdot|s_n)\) 来估计value</p>
-                                <p><strong>实际上</strong>：如果一开始就用π，可能根本不会到达\(s_n\)！</p>
-                            </div>
+                        <p><strong>问题更严重</strong>：</p>
+                        <ul>
+                            <li><code>a_new</code>是π在s_n的选择</li>
+                            <li>但<code>s_n</code>是由<code>a_0, a_1, ..., a_(n-1)</code>（来自β）产生的！</li>
+                            <li><strong>Counterfactual reasoning错误</strong>：假设"如果我当时用π，会到达同样的s_n" ← 这是错的！</li>
+                        </ul>
+                        <div class="highlight-box danger">
+                            <h4>Off-policy分布不匹配</h4>
+                            <p>\(s_n\) 是由 β 生成的轨迹到达的状态<br>
+                            但你用 \(\pi(\cdot|s_n)\) 来估计value</p>
+                            <p><strong>实际上</strong>：如果一开始就用π，可能根本不会到达\(s_n\)！</p>
                         </div>
                     </div>
+                </div>
 
-                    <h3>直观例子</h3>
+                <h3>直观例子</h3>
 
-                    <div class="collapsible">
-                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            场景：机器人抓取任务（点击展开）
-                        </div>
-                        <div class="collapsible-content">
-                            <pre><code class="language-python"># Behavior policy β (保守策略)
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        场景：机器人抓取任务
+                    </div>
+                    <div class="collapsible-content">
+                        <pre><code class="language-python"># Behavior policy β (保守策略)
 s_0: "物体在桌上"
 a_0: "缓慢伸手" (β的选择) → r_0 = -0.1 (时间惩罚)
 s_1: "手在物体旁边"
@@ -972,9 +974,9 @@ s_3: "物体被抓起"
 # 你想训练一个新policy π (激进策略)
 π(s_0) = "快速抓取"  # π会直接快速抓！</code></pre>
 
-                            <div class="highlight-box warning">
-                                <h4>传统n-step TD的问题</h4>
-                                <pre><code class="language-python"># 用dataset的前3步
+                        <div class="highlight-box warning">
+                            <h4>传统n-step TD的问题</h4>
+                            <pre><code class="language-python"># 用dataset的前3步
 G_3 = -0.1 + γ*(-0.1) + γ²*(+1.0) = 0.78
 
 # Bootstrap from s_3
@@ -982,242 +984,230 @@ a_new ~ π(s_3) = "快速放下" (π很激进)
 Q(s_0, a_0="缓慢伸手") ← 0.78 + γ³ * Q(s_3, "快速放下")
 #         ↑                                    ↑
 #    β的action                           π的action</code></pre>
-                            </div>
-
-                            <div class="highlight-box danger">
-                                <h4>矛盾</h4>
-                                <ul>
-                                    <li>你在评估"缓慢伸手"（β的风格）</li>
-                                    <li>但用"快速放下"（π的风格）来bootstrap</li>
-                                    <li>这两个策略的value分布完全不同！</li>
-                                </ul>
-                            </div>
-
-                            <div class="highlight-box primary">
-                                <h4>正确的反事实推理</h4>
-                                <p>如果你一开始就用π("快速抓取")，可能：</p>
-                                <ul>
-                                    <li>50%概率：快速成功，r=+2.0</li>
-                                    <li>50%概率：掉落物体，r=-5.0</li>
-                                </ul>
-                                <p>但dataset给你看的是β的轨迹（缓慢成功），你用π的未来value来bootstrap，<br>
-                                    这就像说"我缓慢开始，然后突然变激进" ← 不一致！</p>
-                            </div>
                         </div>
-                    </div>
-                </section>
 
-                <hr>
-
-                <section id="part3-qchunking">
-                    <h2>3.2 Q-Chunking解决方案：消除Off-policy Bias</h2>
-
-                    <h3>核心洞察</h3>
-
-                    <div class="highlight-box success">
-                        <h4><span class="icon">💡</span> 关键想法</h4>
-                        <p>让Q函数直接评估"一段action sequence"，而不是单个action。</p>
-                    </div>
-
-                    <p><strong>传统单步Q:</strong></p>
-                    <div class="math-block">
-                        \[Q(s_t, a_t)\]
-                    </div>
-                    <p>评估：在\(s_t\)执行\(a_t\)的价值</p>
-
-                    <p><strong>Chunked Q:</strong></p>
-                    <div class="math-block">
-                        \[Q(s_t, a_{t:t+h})\]
-                    </div>
-                    <p>评估：在\(s_t\)执行连续h个actions的价值</p>
-
-                    <h3>为什么这样能消除bias？</h3>
-
-                    <h4>数学推导</h4>
-
-                    <div class="collapsible">
-                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            展开数学推导
-                        </div>
-                        <div class="collapsible-content">
-                            <p><strong>定义</strong>：</p>
+                        <div class="highlight-box danger">
+                            <h4>矛盾</h4>
                             <ul>
-                                <li>\(\tau = (s_0, a_0, r_0, s_1, a_1, r_1, ..., s_h)\)：一个h步trajectory</li>
-                                <li>Trajectory的return：\(G = \sum_{t=0}^{h-1} \gamma^t r_t\)</li>
+                                <li>你在评估"缓慢伸手"（β的风格）</li>
+                                <li>但用"快速放下"（π的风格）来bootstrap</li>
+                                <li>这两个策略的value分布完全不同！</li>
                             </ul>
+                        </div>
 
-                            <div class="math-block">
-                                <p><strong>Chunked Q的定义</strong>：</p>
-                                \[Q(s_0, a_{0:h}) = \mathbb{E}[G + \gamma^h V(s_h) | s_0, a_0, a_1, ..., a_{h-1}]\]
-                            </div>
-
-                            <div class="highlight-box primary">
-                                <h4>关键点</h4>
-                                <p>Q函数condition在<strong>exact actions that generate the rewards</strong>！</p>
-                            </div>
+                        <div class="highlight-box primary">
+                            <h4>正确的反事实推理</h4>
+                            <p>如果你一开始就用π("快速抓取")，可能：</p>
+                            <ul>
+                                <li>50%概率：快速成功，r=+2.0</li>
+                                <li>50%概率：掉落物体，r=-5.0</li>
+                            </ul>
+                            <p>但dataset给你看的是β的轨迹（缓慢成功），你用π的未来value来bootstrap，<br>
+                            这就像说"我缓慢开始，然后突然变激进" ← 不一致！</p>
                         </div>
                     </div>
+                </div>
+            </section>
 
-                    <h4>对比传统方法</h4>
+            <hr>
 
-                    <div class="comparison-container">
-                        <div class="comparison-box left">
-                            <h4><span class="icon">❌</span> 传统n-step (有bias)</h4>
-                            <pre><code class="language-python"># 计算n-step return
-G_n = r_0 + γ*r_1 + ... + γⁿ⁻¹*r_(n-1)
+            <section id="q-chunking解决方案">
+                <h2>Q-Chunking解决方案：消除Off-policy Bias</h2>
+
+                <h3>核心洞察</h3>
+
+                <div class="highlight-box success">
+                    <h4><span class="icon">💡</span> 关键想法</h4>
+                    <p>让Q函数直接评估"一段action sequence"，而不是单个action。</p>
+                    <div class="math-block">
+                        \[\text{传统单步Q: } Q(s_t, a_t) \text{ # 评估：在}s_t\text{执行}a_t\text{的价值}\]
+                        \[\text{Chunked Q: } Q(s_t, a_{t:t+h}) \text{ # 评估：在}s_t\text{执行连续h个actions的价值}\]
+                    </div>
+                </div>
+
+                <h3>为什么这样能消除bias？</h3>
+
+                <h4>数学推导</h4>
+
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        展开数学推导
+                    </div>
+                    <div class="collapsible-content">
+                        <p><strong>定义</strong>：</p>
+                        <ul>
+                            <li>\(\tau = (s_0, a_0, r_0, s_1, a_1, r_1, ..., s_h)\)：一个h步trajectory</li>
+                            <li>Trajectory的return：\(G = \sum_{t=0}^{h-1} \gamma^t r_t\)</li>
+                        </ul>
+
+                        <div class="math-block">
+                            <p><strong>Chunked Q的定义</strong>：</p>
+                            \[Q(s_0, a_{0:h}) = \mathbb{E}[G + \gamma^h V(s_h) | s_0, a_0, a_1, ..., a_{h-1}]\]
+                        </div>
+
+                        <div class="highlight-box primary">
+                            <h4>关键点</h4>
+                            <p>Q函数condition在<strong>exact actions that generate the rewards</strong>！</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h4>对比传统方法</h4>
+
+                <div class="comparison-container">
+                    <div class="comparison-box left">
+                        <h4><span class="icon">❌</span> 传统n-step (有bias)</h4>
+                        <pre><code class="language-python"># 计算n-step return
+G_n = r_0 + γ*r_1 + ... + γⁿ⁻¹*r_(n-1)  # 由a_0,...,a_(n-1)产生
 
 # Bootstrap
 Q(s_0, a_0) ← G_n + γⁿ * Q(s_n, a_n')
 #                                  ↑
-#                       可能是新采样的action！
-#                       (和生成G_n的actions不匹配)</code></pre>
-                        </div>
+#                            可能是新采样的action！
+#                            (和生成G_n的actions不匹配)</code></pre>
+                    </div>
 
-                        <div class="comparison-box right">
-                            <h4><span class="icon">✓</span> Chunked Q (无bias)</h4>
-                            <pre><code class="language-python"># 计算n-step return（同样的）
+                    <div class="comparison-box right">
+                        <h4><span class="icon">✓</span> Chunked Q (无bias)</h4>
+                        <pre><code class="language-python"># 计算n-step return（同样的）
 G_n = r_0 + γ*r_1 + ... + γⁿ⁻¹*r_(n-1)
 
 # Bootstrap
 Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
 #       ↑                              ↑
 #  生成G_n的actions            下一个chunk的actions
-#                            (来自同一个trajectory)</code></pre>
-                        </div>
+#                               (来自同一个trajectory)</code></pre>
                     </div>
+                </div>
 
-                    <div class="highlight-box success">
-                        <h4><span class="icon">✓</span> 为什么无bias？</h4>
-                        <p>因为：</p>
-                        <p><strong>\(Q(s_0, a_{0:n})\) 的定义就是：</strong></p>
-                        <p>"从\(s_0\)开始，执行\(a_0, a_1, ..., a_{n-1}\)，然后评估后续价值"</p>
-                        <p>而 \(G_n\) 正是执行这些actions得到的实际return！</p>
-                        <p><strong>所以：</strong></p>
-                        <div class="math-block">
-                            \[\mathbb{E}[G_n | s_0, a_{0:n}] = Q(s_0, a_{0:n})\]
-                        </div>
-                        <p>这是unbiased估计</p>
-                    </div>
-
-                    <h3>直观理解：整体评估 vs 局部评估</h3>
-
-                    <div class="comparison-container">
-                        <div class="comparison-box left">
-                            <h4>传统Q函数（局部）</h4>
-                            <p>"我只看第一步action \(a\)，然后假设后续按某个policy走"</p>
-                            <div class="math-block">
-                                \[Q(s, a)\]
-                            </div>
-                        </div>
-
-                        <div class="comparison-box right">
-                            <h4>Chunked Q函数（整体）</h4>
-                            <p>"我看整个h步action sequence，直接评估这个sequence的价值"</p>
-                            <div class="math-block">
-                                \[Q(s, a_{0:h})\]
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="collapsible">
-                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            类比：评估一部电影（点击展开）
-                        </div>
-                        <div class="collapsible-content">
-                            <div class="comparison-container">
-                                <div class="comparison-box left">
-                                    <h4>传统方法</h4>
-                                    <p>"这部电影第一分钟很好 (a_0)，<br>
-                                        所以我假设后面也会遵循我喜欢的风格"</p>
-                                    <p><strong>→ 问题</strong>：但实际上后面可能是另一个导演拍的！(off-policy)</p>
-                                </div>
-
-                                <div class="comparison-box right">
-                                    <h4>Chunked方法</h4>
-                                    <p>"我看了前10分钟 (a_{0:10})，<br>
-                                        直接评估这10分钟的质量"</p>
-                                    <p><strong>→ 正确</strong>：我评估的就是实际发生的那10分钟</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <hr>
-
-                <section id="part3-advantage">
-                    <h2>3.3 为什么单步Advantage就够了？</h2>
-
-                    <h3>常见误解</h3>
-
-                    <div class="highlight-box warning">
-                        <h4><span class="icon">🤔</span> 很多人看到action chunking后会想</h4>
-                        <p>"既然我用h-step actions，<br>
-                        是不是也需要h-step advantage？"</p>
-                        <p>比如：</p>
-                        <div class="math-block">
-                            \[A_h(s, a_{0:h}) = \sum \gamma^t (r_t - V(s_t))\]
-                        </div>
-                        <p>h步advantage？</p>
-                    </div>
-
-                    <div class="highlight-box success">
-                        <h4><span class="icon">✓</span> 答案：不需要！</h4>
-                    </div>
-
-                    <h3>数学解释</h3>
-
+                <div class="highlight-box success">
+                    <h4><span class="icon">✓</span> 为什么无bias？</h4>
+                    <p>因为：</p>
                     <div class="math-block">
-                        <p><strong>回顾Advantage的定义</strong>：</p>
-                        \[A(s, a) = Q(s, a) - V(s)\]
-                        <p>意义：</p>
-                        <ul>
-                            <li>\(Q(s, a)\)：执行action a然后follow policy的价值</li>
-                            <li>\(V(s)\)：直接follow policy（不执行a）的价值</li>
-                            <li>\(A(s, a)\)：执行a相比于平均的优势</li>
-                        </ul>
+                        \[Q(s_0, a_{0:n}) \text{ 的定义就是：}\]
+                        \[\text{"从}s_0\text{开始，执行}a_0, a_1, ..., a_{n-1}\text{，然后评估后续价值"}\]
+                        <br>
+                        \[\text{而 } G_n \text{ 正是执行这些actions得到的实际return！}\]
+                        <br>
+                        \[\text{所以：}\mathbb{E}[G_n | s_0, a_{0:n}] \text{ 就是}Q(s_0, a_{0:n})\text{的unbiased估计}\]
                     </div>
+                </div>
 
-                    <div class="highlight-box primary">
-                        <h4>对于Chunked Q</h4>
+                <h3>直观理解：整体评估 vs 局部评估</h3>
+
+                <div class="comparison-container">
+                    <div class="comparison-box left">
+                        <h4>传统Q函数（局部）</h4>
                         <div class="math-block">
-                            \[A(s, a_{0:h}) = Q(s, a_{0:h}) - V(s)\]
-                        </div>
-                        <p>这已经是<strong>h-step advantage</strong>了！</p>
-                    </div>
-
-                    <div class="collapsible">
-                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            为什么？展开详细解释
-                        </div>
-                        <div class="collapsible-content">
-                            <p>让我们展开Q函数：</p>
-                            <div class="math-block">
-                                \[Q(s_0, a_{0:h}) = \mathbb{E}[r_0 + \gamma r_1 + ... + \gamma^{h-1} r_{h-1} + \gamma^h V(s_h)]\]
-                                <br>
-                                \[V(s_0) = \mathbb{E}[r_0 + \gamma r_1 + ... + \gamma^{h-1} r_{h-1} + \gamma^h V(s_h)]\]
-                            </div>
-                            <p>(这里的actions来自policy \(\pi\))</p>
-                            <div class="math-block">
-                                \[A(s_0, a_{0:h}) = Q(s_0, a_{0:h}) - V(s_0)\]
-                            </div>
-
-                            <p><strong>分解一下</strong>：</p>
-                            <div class="math-block">
-                                \[Q(s_0, a_{0:h}) - V(s_0) = \mathbb{E}[\sum \gamma^t r_t | a_{0:h}] - \mathbb{E}[\sum \gamma^t r_t | \pi]\]
-                            </div>
-                            <p>= "这个特定chunk相比policy的h-step优势"</p>
+                            \[Q(s, a) = \text{"我只看第一步action } a\text{，然后假设后续按某个policy走"}\]
                         </div>
                     </div>
 
-                    <h3>对比：手动计算multi-step advantage（不需要）</h3>
-
-                    <div class="collapsible">
-                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            有人可能会这样想（展开查看）
+                    <div class="comparison-box right">
+                        <h4>Chunked Q函数（整体）</h4>
+                        <div class="math-block">
+                            \[Q(s, a_{0:h}) = \text{"我看整个h步action sequence，直接评估这个sequence的价值"}\]
                         </div>
-                        <div class="collapsible-content">
-                            <pre><code class="language-python"># 错误的想法：手动计算n-step advantage
+                    </div>
+                </div>
+
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        类比：评估一部电影
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="comparison-container">
+                            <div class="comparison-box left">
+                                <h4>传统方法</h4>
+                                <p>"这部电影第一分钟很好 (a_0)，<br>
+                                所以我假设后面也会遵循我喜欢的风格"</p>
+                                <p><strong>→ 问题</strong>：但实际上后面可能是另一个导演拍的！(off-policy)</p>
+                            </div>
+
+                            <div class="comparison-box right">
+                                <h4>Chunked方法</h4>
+                                <p>"我看了前10分钟 (a_{0:10})，<br>
+                                直接评估这10分钟的质量"</p>
+                                <p><strong>→ 正确</strong>：我评估的就是实际发生的那10分钟</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="单步advantage">
+                <h2>为什么单步Advantage就够了？</h2>
+
+                <h3>常见误解</h3>
+
+                <div class="highlight-box warning">
+                    <h4><span class="icon">🤔</span> 很多人看到action chunking后会想</h4>
+                    <p>"既然我用h-step actions，<br>
+                    是不是也需要h-step advantage？"</p>
+                    <div class="math-block">
+                        \[A_h(s, a_{0:h}) = \sum \gamma^t (r_t - V(s_t)) \text{  # h步advantage？}\]
+                    </div>
+                </div>
+
+                <div class="highlight-box success">
+                    <h4><span class="icon">✓</span> 答案：不需要！</h4>
+                </div>
+
+                <h3>数学解释</h3>
+
+                <div class="math-block">
+                    <p><strong>回顾Advantage的定义</strong>：</p>
+                    \[A(s, a) = Q(s, a) - V(s)\]
+                    <p>意义：</p>
+                    <ul>
+                        <li>\(Q(s, a)\)：执行action a然后follow policy的价值</li>
+                        <li>\(V(s)\)：直接follow policy（不执行a）的价值</li>
+                        <li>\(A(s, a)\)：执行a相比于平均的优势</li>
+                    </ul>
+                </div>
+
+                <div class="highlight-box primary">
+                    <h4>对于Chunked Q</h4>
+                    <div class="math-block">
+                        \[A(s, a_{0:h}) = Q(s, a_{0:h}) - V(s)\]
+                    </div>
+                    <p>这已经是<strong>h-step advantage</strong>了！</p>
+                </div>
+
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        为什么？展开详细解释
+                    </div>
+                    <div class="collapsible-content">
+                        <p>让我们展开Q函数：</p>
+                        <div class="math-block">
+                            \[Q(s_0, a_{0:h}) = \mathbb{E}[r_0 + \gamma r_1 + ... + \gamma^{h-1} r_{h-1} + \gamma^h V(s_h)]\]
+                            <br>
+                            \[V(s_0) = \mathbb{E}[r_0 + \gamma r_1 + ... + \gamma^{h-1} r_{h-1} + \gamma^h V(s_h)]\]
+                            \[\text{(这里的actions来自policy } \pi\text{)}\]
+                            <br>
+                            \[A(s_0, a_{0:h}) = Q(s_0, a_{0:h}) - V(s_0) = \mathbb{E}[\text{所有h步的差异}]\]
+                        </div>
+
+                        <p><strong>分解一下</strong>：</p>
+                        <div class="math-block">
+                            \[Q(s_0, a_{0:h}) - V(s_0)\]
+                            \[= [\sum \gamma^t r_t | a_{0:h}\text{固定}] - [\sum \gamma^t r_t | \text{actions} \sim \pi]\]
+                            \[= \text{"这个特定chunk相比policy的h-step优势"}\]
+                        </div>
+                    </div>
+                </div>
+
+                <h3>对比：手动计算multi-step advantage（不需要）</h3>
+
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        有人可能会这样想（展开查看）
+                    </div>
+                    <div class="collapsible-content">
+                        <pre><code class="language-python"># 错误的想法：手动计算n-step advantage
 def multi_step_advantage(s, actions, V, gamma, n):
     """这是多余的！"""
     advantage = 0
@@ -1233,43 +1223,43 @@ def multi_step_advantage(s, actions, V, gamma, n):
 
     return advantage</code></pre>
 
-                            <div class="highlight-box warning">
-                                <h4>为什么这是多余的？</h4>
-                                <p>因为：</p>
-                                <pre><code class="language-python"># 简单的方式（正确）
+                        <div class="highlight-box warning">
+                            <h4>为什么这是多余的？</h4>
+                            <p>因为：</p>
+                            <pre><code class="language-python"># 简单的方式（正确）
 advantage = Q_chunk(s, action_chunk) - V(s)
 
 # 上面的multi_step_advantage计算的也是这个！
 # Chunked Q已经包含了所有h步的信息</code></pre>
-                            </div>
                         </div>
                     </div>
+                </div>
 
-                    <h3>直观例子</h3>
+                <h3>直观例子</h3>
 
-                    <div class="comparison-container">
-                        <div class="comparison-box left">
-                            <h4>传统思维（错误）</h4>
-                            <p>"我需要计算：<br>
-                                第1步的advantage +<br>
-                                第2步的advantage +<br>
-                                第3步的advantage +<br>
-                                第4步的advantage +<br>
-                                第5步的advantage"</p>
-                        </div>
-
-                        <div class="comparison-box right">
-                            <h4>正确思维</h4>
-                            <p>"我直接问：<br>
-                                '执行这整个5步序列' vs '按policy做5步'<br>
-                                哪个更好？"</p>
-                            <p><strong>→ 这就是 Q(s, a_{0:5}) - V(s)</strong></p>
-                        </div>
+                <div class="comparison-container">
+                    <div class="comparison-box left">
+                        <h4>传统思维（错误）</h4>
+                        <p>"我需要计算：<br>
+                        第1步的advantage +<br>
+                        第2步的advantage +<br>
+                        第3步的advantage +<br>
+                        第4步的advantage +<br>
+                        第5步的advantage"</p>
                     </div>
 
-                    <div class="highlight-box primary">
-                        <h4>更具体的例子</h4>
-                        <pre><code class="language-python"># 你的chunk
+                    <div class="comparison-box right">
+                        <h4>正确思维</h4>
+                        <p>"我直接问：<br>
+                        '执行这整个5步序列' vs '按policy做5步'<br>
+                        哪个更好？"</p>
+                        <p><strong>→ 这就是 Q(s, a_{0:5}) - V(s)</strong></p>
+                    </div>
+                </div>
+
+                <div class="highlight-box primary">
+                    <h4>更具体的例子</h4>
+                    <pre><code class="language-python"># 你的chunk
 action_chunk = ["伸手", "张开手", "抓取", "合拢", "提起"]
 
 # Chunked Q
@@ -1280,29 +1270,28 @@ V(s_0) = 期望return of policy自己选择5个动作
 
 # Advantage
 A = Q - V = "你的chunk vs policy的默认行为，谁更好？"</code></pre>
-                        <p>这<strong>已经</strong>考虑了5步的累积效果！不需要再手动sum 5个单步advantages。</p>
+                    <p>这<strong>已经</strong>考虑了5步的累积效果！不需要再手动sum 5个单步advantages。</p>
+                </div>
+            </section>
+
+            <hr>
+
+            <section id="decoupled动机">
+                <h2>Decoupled Q-Chunking的动机</h2>
+
+                <h3>Q-Chunking的局限性</h3>
+
+                <div class="highlight-box warning">
+                    <h4>Q-Chunking的设定</h4>
+                    <div class="math-block">
+                        \[\text{policy chunk size} = \text{critic chunk size}\]
+                        \[h_a = h = 5 \text{ (例如)}\]
                     </div>
-                </section>
+                </div>
 
-                <hr>
+                <h4>问题1：长horizon任务效率低</h4>
 
-                <section id="part3-decoupled">
-                    <h2>3.4 Decoupled Q-Chunking的动机</h2>
-
-                    <h3>Q-Chunking的局限性</h3>
-
-                    <div class="highlight-box warning">
-                        <h4>Q-Chunking的设定</h4>
-                        <p>policy chunk size = critic chunk size</p>
-                        <div class="math-block">
-                            \[h_a = h = 5\]
-                        </div>
-                        <p>(例如)</p>
-                    </div>
-
-                    <h4>问题1：长horizon任务效率低</h4>
-
-                    <pre><code class="language-python"># 假设任务需要500步完成
+                <pre><code class="language-python"># 假设任务需要500步完成
 # 用h=5的chunks需要100次预测
 
 for step in range(0, 500, 5):
@@ -1310,18 +1299,18 @@ for step in range(0, 500, 5):
     execute(action_chunk)        # 执行5步
     # 总共100次预测</code></pre>
 
-                    <div class="highlight-box success">
-                        <h4>如果能用更大的critic chunk (h=25)</h4>
-                        <pre><code class="language-python"># critic可以"看得更远"，一次bootstrap 25步
+                <div class="highlight-box success">
+                    <h4>如果能用更大的critic chunk (h=25)</h4>
+                    <pre><code class="language-python"># critic可以"看得更远"，一次bootstrap 25步
 Q(s_t, a_{t:t+25}) = Σγᵏr_k + γ²⁵*Q(s_{t+25}, ...)
 #                      ↑
 #                   25步的rewards
 #                   更高效的value learning</code></pre>
-                    </div>
+                </div>
 
-                    <h4>问题2：Policy reactivity不足</h4>
+                <h4>问题2：Policy reactivity不足</h4>
 
-                    <pre><code class="language-python"># 如果policy也用h=25
+                <pre><code class="language-python"># 如果policy也用h=25
 policy_chunk = π(obs)  # 一次预测25步actions
 
 # 执行过程（open-loop）：
@@ -1330,65 +1319,63 @@ for t in range(25):
     # 这期间环境可能变化了
     # 但policy不能调整！</code></pre>
 
-                    <p>如果环境有随机性，25步open-loop执行太长了。</p>
+                <p>如果环境有随机性，25步open-loop执行太长了。</p>
 
-                    <div class="highlight-box danger">
-                        <h4><span class="icon">⚠️</span> 矛盾</h4>
-                        <ul>
-                            <li>想要critic用大chunk (h=25) → 高效学习</li>
-                            <li>但policy需要小chunk (h_a=5) → 更responsive</li>
-                        </ul>
-                    </div>
+                <div class="highlight-box danger">
+                    <h4><span class="icon">⚠️</span> 矛盾</h4>
+                    <ul>
+                        <li>想要critic用大chunk (h=25) → 高效学习</li>
+                        <li>但policy需要小chunk (h_a=5) → 更responsive</li>
+                    </ul>
+                </div>
 
-                    <h3>DQC的解决方案</h3>
+                <h3>DQC的解决方案</h3>
 
-                    <div class="highlight-box success">
-                        <h4><span class="icon">💡</span> 核心想法：Decouple两者！</h4>
-                        <pre><code class="language-python"># Full Chunk Critic (h=25) - 用于高效value learning
+                <div class="highlight-box success">
+                    <h4><span class="icon">💡</span> 核心想法：Decouple两者！</h4>
+                    <pre><code class="language-python"># Full Chunk Critic (h=25) - 用于高效value learning
 Q_full(s, a_{0:25})
 
 # Partial Chunk Policy (h_a=5) - 用于responsive control
 π(a_{0:5} | s)
 
 # 问题：如何连接两者？</code></pre>
-                    </div>
+                </div>
 
-                    <h4>解决方法：Distillation</h4>
+                <h4>解决方法：Distillation</h4>
 
-                    <p>训练一个"partial critic"：</p>
+                <p>训练一个"partial critic"：</p>
 
+                <div class="math-block">
+                    \[Q_{\text{partial}}(s, a_{0:5}) \approx \max_{a_{5:25}} Q_{\text{full}}(s, [a_{0:5}, a_{5:25}])\]
+                    <p>"如果前5步是\(a_{0:5}\)，最好的后20步能达到的最大Q值"</p>
+                </div>
+
+                <div class="highlight-box primary">
+                    <h4>直观理解</h4>
                     <div class="math-block">
-                        \[Q_{\text{partial}}(s, a_{0:5}) \approx \max_{a_{5:25}} Q_{\text{full}}(s, [a_{0:5},
-                        a_{5:25}])\]
-                        <p>"如果前5步是\(a_{0:5}\)，最好的后20步能达到的最大Q值"</p>
+                        \[Q_{\text{partial}}(s, \text{"前5步"}) = \text{"执行这5步后，乐观地完成后20步，能得到的最好价值"}\]
                     </div>
+                </div>
 
-                    <div class="highlight-box primary">
-                        <h4>直观理解</h4>
-                        <p>"执行前5步后，乐观地完成后20步，能得到的最好价值"</p>
-                        <div class="math-block">
-                            \[Q_{\text{partial}}(s, a_{0:5})\]
-                        </div>
+                <h3>为什么用Expectile Regression而非Max？</h3>
+
+                <div class="highlight-box warning">
+                    <h4>问题：如果直接算max</h4>
+                    <div class="math-block">
+                        \[Q_{\text{partial}}(s, a_{0:5}) = \max_{a_{5:25}} Q_{\text{full}}(s, [a_{0:5}, a_{5:25}])\]
                     </div>
+                    <p>需要对所有可能的\(a_{5:25}\)做优化 → <strong>计算量爆炸</strong>！</p>
+                </div>
 
-                    <h3>为什么用Expectile Regression而非Max？</h3>
-
-                    <div class="highlight-box warning">
-                        <h4>问题：如果直接算max</h4>
-                        <div class="math-block">
-                            \[Q_{\text{partial}}(s, a_{0:5}) = \max_{a_{5:25}} Q_{\text{full}}(s, [a_{0:5}, a_{5:25}])\]
-                        </div>
-                        <p>需要对所有可能的\(a_{5:25}\)做优化 → <strong>计算量爆炸</strong>！</p>
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        解决方案：Expectile Regression（展开详解）
                     </div>
+                    <div class="collapsible-content">
+                        <p><strong>想法</strong>：从dataset采样，用expectile来近似max</p>
 
-                    <div class="collapsible">
-                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            解决方案：Expectile Regression（展开详解）
-                        </div>
-                        <div class="collapsible-content">
-                            <p><strong>想法</strong>：从dataset采样，用expectile来近似max</p>
-
-                            <pre><code class="language-python"># 从dataset采样多个完整chunks
+                        <pre><code class="language-python"># 从dataset采样多个完整chunks
 chunks = [(a_{0:5}^1, a_{5:25}^1),
           (a_{0:5}^1, a_{5:25}^2),
           (a_{0:5}^1, a_{5:25}^3),
@@ -1400,326 +1387,370 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
 # Expectile regression (κ=0.8)
 # 更关注高Q值的samples</code></pre>
 
-                            <div class="math-block">
-                                <p><strong>Expectile Loss</strong>：</p>
-                                <pre><code class="language-python">def expectile_loss(target, pred, kappa=0.8):
+                        <div class="math-block">
+                            <p><strong>Expectile Loss</strong>：</p>
+                            <pre><code class="language-python">def expectile_loss(target, pred, kappa=0.8):
     residual = target - pred
     weight = |kappa - I(residual < 0)|
     return (weight * residual²).mean()</code></pre>
-                            </div>
-
-                            <div class="highlight-box success">
-                                <h4>效果</h4>
-                                <ul>
-                                    <li>当κ=0.8时，对"高于预测"的targets给80%权重</li>
-                                    <li>对"低于预测"的targets给20%权重</li>
-                                    <li>→ 预测值会偏向高Q值（近似max）</li>
-                                </ul>
-                            </div>
-
-                            <div class="highlight-box primary">
-                                <h4>为什么有效？</h4>
-                                <div class="math-block">
-                                    \[\max Q \approx \mathbb{E}_{\kappa \to 1}[Q]\]
-                                    <p>当κ接近1，expectile接近max</p>
-                                    <br>
-                                    <p>κ=0.8是一个平衡：</p>
-                                    <ul>
-                                        <li>足够optimistic（接近max）</li>
-                                        <li>但不会对outliers过拟合</li>
-                                    </ul>
-                                </div>
-                            </div>
                         </div>
-                    </div>
-                </section>
 
-                <hr>
-
-                <section id="part3-proof">
-                    <h2>3.5 数学证明详解</h2>
-
-                    <h3>Proposition A.1 (Q-Chunking Paper)</h3>
-
-                    <div class="highlight-box primary">
-                        <h4><span class="icon">📐</span> 定理：Chunked Q backup是unbiased的</h4>
-                    </div>
-
-                    <div class="collapsible">
-                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            完整证明（展开）
-                        </div>
-                        <div class="collapsible-content">
-                            <h4>设定</h4>
+                        <div class="highlight-box success">
+                            <h4>效果</h4>
                             <ul>
-                                <li>Trajectory: \(\tau = (s_0, a_0, r_0, s_1, ..., s_h, a_h, ...)\)</li>
-                                <li>Behavior policy: \(\beta\)</li>
-                                <li>Target policy: \(\pi\)</li>
+                                <li>当κ=0.8时，对"高于预测"的targets给80%权重</li>
+                                <li>对"低于预测"的targets给20%权重</li>
+                                <li>→ 预测值会偏向高Q值（近似max）</li>
                             </ul>
+                        </div>
 
-                            <h4>传统n-step backup (biased)</h4>
-
+                        <div class="highlight-box primary">
+                            <h4>为什么有效？</h4>
                             <div class="math-block">
-                                <p><strong>更新规则</strong>：</p>
-                                \[Q^{(k+1)}(s_0, a_0) = (1-\alpha)Q^{(k)}(s_0, a_0) + \alpha[G_n + \gamma^n Q^{(k)}(s_n,
-                                a_n')]\]
-                                <p>其中 \(a_n' \sim \pi(\cdot|s_n)\) (新采样)</p>
-                            </div>
-
-                            <div class="highlight-box danger">
-                                <h4>Bias来源</h4>
-                                <p>期望的target是：</p>
-                                <div class="math-block">
-                                    \[\mathbb{E}[G_n + \gamma^n Q(s_n, a_n') | s_0, a_0]\]
-                                    <br>
-                                    \[= \mathbb{E}[\sum \gamma^k r_k | s_0, a_0, \text{actions from } \beta] + \gamma^n
-                                    \mathbb{E}[Q(s_n, a_n') | s_n \sim \beta\text{-rollout}]\]
-                                </div>
-
-                                <p><strong>问题</strong>：</p>
-                                <div class="math-block">
-                                    \[\mathbb{E}[Q(s_n, a_n') | s_n \sim \beta\text{-rollout}, a_n' \sim \pi]\]
-                                    \[\neq \mathbb{E}[Q(s_n, a_n) | s_n \sim \pi\text{-rollout}, a_n \sim \pi]\]
-                                </div>
-
-                                <p><strong>分布不匹配</strong>：</p>
-                                <div class="math-block">
-                                    \[P(s_n | s_0, \text{actions} \sim \beta) \neq P(s_n | s_0, \text{actions} \sim
-                                    \pi)\]
-                                </div>
-                            </div>
-
-                            <h4>Chunked Q backup (unbiased)</h4>
-
-                            <div class="math-block">
-                                <p><strong>更新规则</strong>：</p>
-                                \[Q^{(k+1)}(s_0, a_{0:n}) = (1-\alpha)Q^{(k)}(s_0, a_{0:n}) + \alpha[G_n + \gamma^n
-                                Q^{(k)}(s_n, a_{n:2n})]\]
-                            </div>
-
-                            <div class="highlight-box success">
-                                <h4>关键：\(a_{n:2n}\) 来自同一个trajectory！</h4>
-
-                                <p><strong>为什么unbiased？</strong></p>
-
-                                <p>期望的target：</p>
-                                <div class="math-block">
-                                    \[\mathbb{E}[G_n + \gamma^n Q(s_n, a_{n:2n}) | s_0, a_{0:n}]\]
-                                    \[= \mathbb{E}[\sum \gamma^k r_k | s_0, a_{0:n}] + \gamma^n \mathbb{E}[Q(s_n,
-                                    a_{n:2n}) | s_0, a_{0:n}]\]
-                                </div>
-
-                                <p><strong>关键观察</strong>：</p>
-                                <ol>
-                                    <li>\(s_n\) 是由 \(a_0, ..., a_{n-1}\) 决定的</li>
-                                    <li>\(a_{n:2n}\) 来自dataset的同一条trajectory</li>
-                                    <li>整个序列 \(a_0, ..., a_{2n-1}\) 是由同一个policy（或者同一个人类演示）生成的</li>
-                                </ol>
-
-                                <p><strong>Consistency</strong>：</p>
-                                <div class="math-block">
-                                    \[P(s_n | s_0, a_{0:n}) = P(s_n | s_0, a_0, ..., a_{n-1})\]
-                                </div>
-                                <p>(确定的)</p>
-
-                                <p><strong>Bellman equation满足</strong>：</p>
-                                <div class="math-block">
-                                    \[Q(s_0, a_{0:n}) = \mathbb{E}[\sum \gamma^k r_k + \gamma^n Q(s_n, a_{n:2n}) | s_0, a_{0:n}, \text{trajectory} \sim D]\]
-                                    <p>这正是Bellman consistency对于chunked Q的形式！</p>
-                                </div>
-                            </div>
-
-                            <h4>形式化</h4>
-
-                            <div class="math-block">
-                                <p>定义operator \(T\):</p>
-                                \[[TQ](s, a_{0:n}) = \mathbb{E}[\sum \gamma^k r_k + \gamma^n Q(s_n, a_{n:2n}) | s,
-                                a_{0:n}, \tau \sim D]\]
-                            </div>
-
-                            <div class="highlight-box primary">
-                                <h4>定理</h4>
-                                <p>\(Q^*\) 是\(T\)的不动点，且迭代\(Q^{(k+1)} = TQ^{(k)}\)收敛到\(Q^*\)</p>
-
-                                <p><strong>证明收敛性</strong>：</p>
-
-                                <p>1. <strong>Contraction</strong>:</p>
-                                <div class="math-block">
-                                    \[\|TQ_1 - TQ_2\|_\infty \leq \gamma^n \cdot \|Q_1 - Q_2\|_\infty\]
-                                </div>
-
-                                <p>2. <strong>不动点唯一</strong>: 由Banach不动点定理</p>
-
-                                <p>3. <strong>Unbiased</strong>: 每次迭代是对\(TQ\)的无偏估计</p>
-
-                                <p>∎</p>
+                                \[\max Q \approx \mathbb{E}_{\kappa \to 1}[Q] \text{  # 当κ接近1，expectile接近max}\]
+                                <br>
+                                \[\text{κ=0.8是一个平衡：}\]
+                                <ul>
+                                    <li>足够optimistic（接近max）</li>
+                                    <li>但不会对outliers过拟合</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
+                </div>
+            </section>
 
-                    <h3>Theorem 1 (DQC Paper): Value Bias Bound</h3>
+            <hr>
 
-                    <div class="highlight-box primary">
-                        <h4><span class="icon">📐</span> 定理：Open-loop execution的value bias有界</h4>
+            <section id="数学证明">
+                <h2>数学证明详解</h2>
+
+                <h3>Proposition A.1 (Q-Chunking Paper)</h3>
+
+                <div class="highlight-box primary">
+                    <h4><span class="icon">📐</span> 定理：Chunked Q backup是unbiased的</h4>
+                </div>
+
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        完整证明（展开）
                     </div>
+                    <div class="collapsible-content">
+                        <h4>设定</h4>
+                        <ul>
+                            <li>Trajectory: \(\tau = (s_0, a_0, r_0, s_1, ..., s_h, a_h, ...)\)</li>
+                            <li>Behavior policy: \(\beta\)</li>
+                            <li>Target policy: \(\pi\)</li>
+                        </ul>
 
-                    <div class="collapsible">
-                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
-                            完整证明（展开）
+                        <h4>传统n-step backup (biased)</h4>
+
+                        <div class="math-block">
+                            <p><strong>更新规则</strong>：</p>
+                            \[Q^{(k+1)}(s_0, a_0) = (1-\alpha)Q^{(k)}(s_0, a_0) + \alpha[G_n + \gamma^n Q^{(k)}(s_n, a_n')]\]
+                            <p>其中 \(a_n' \sim \pi(\cdot|s_n)\) (新采样)</p>
                         </div>
-                        <div class="collapsible-content">
-                            <h4>定义</h4>
 
+                        <div class="highlight-box danger">
+                            <h4>Bias来源</h4>
+                            <p>期望的target是：</p>
                             <div class="math-block">
-                                <p><strong>Open-loop consistency</strong> (Definition 2):</p>
-                                <p>Dataset \(D\) 是 \(\epsilon_h\)-open-loop consistent 如果：</p>
-                                \[D_{TV}(P^D(s_{t+h} | s_t) \| P^D_\circ(s_{t+h} | s_t)) \leq \epsilon_h\]
-
-                                <p>其中：</p>
-                                <ul>
-                                    <li>\(P^D\): dataset的边际状态分布</li>
-                                    <li>\(P^D_\circ\): open-loop执行（不考虑中间action）的分布</li>
-                                </ul>
+                                \[\mathbb{E}[G_n + \gamma^n Q(s_n, a_n') | s_0, a_0]\]
+                                <br>
+                                \[= \mathbb{E}[\sum \gamma^k r_k | s_0, a_0, \text{actions from } \beta] + \gamma^n \mathbb{E}[Q(s_n, a_n') | s_n \sim \beta\text{-rollout}]\]
                             </div>
 
-                            <div class="highlight-box primary">
-                                <h4>直观理解</h4>
-                                <p>"如果我在\(s_t\)规划h步actions，h步后到达的状态\(s_{t+h}\)的分布，应该接近dataset中'h步后'的状态分布"</p>
-                            </div>
-
-                            <h4>定理陈述</h4>
-
+                            <p><strong>问题</strong>：</p>
                             <div class="math-block">
-                                <p>如果dataset是\(\epsilon_h\)-open-loop consistent，那么：</p>
-                                \[|V^{ac}(s_t) - \hat{V}^{ac}(s_t)| \leq \epsilon_h \cdot H \cdot \bar{H}\]
-
-                                <p>其中：</p>
-                                <ul>
-                                    <li>\(V^{ac}\): actor-critic的真实value</li>
-                                    <li>\(\hat{V}^{ac}\): 估计的value</li>
-                                    <li>\(H = 1/(1-\gamma)\): 有效horizon</li>
-                                    <li>\(\bar{H} = 1/(1-\gamma^h)\): chunked horizon</li>
-                                </ul>
+                                \[\mathbb{E}[Q(s_n, a_n') | s_n \sim \beta\text{-rollout}, a_n' \sim \pi]\]
+                                \[\neq \mathbb{E}[Q(s_n, a_n) | s_n \sim \pi\text{-rollout}, a_n \sim \pi]\]
                             </div>
 
-                            <h4>证明思路</h4>
-
-                            <p><strong>1. 分解bias</strong>：</p>
+                            <p><strong>分布不匹配</strong>：</p>
                             <div class="math-block">
-                                \[V^{ac} - \hat{V}^{ac} = \mathbb{E}[\sum_{k=0}^\infty \gamma^k (r_k - \hat{r}_k)]\]
+                                \[P(s_n | s_0, \text{actions} \sim \beta) \neq P(s_n | s_0, \text{actions} \sim \pi)\]
+                            </div>
+                        </div>
+
+                        <h4>Chunked Q backup (unbiased)</h4>
+
+                        <div class="math-block">
+                            <p><strong>更新规则</strong>：</p>
+                            \[Q^{(k+1)}(s_0, a_{0:n}) = (1-\alpha)Q^{(k)}(s_0, a_{0:n}) + \alpha[G_n + \gamma^n Q^{(k)}(s_n, a_{n:2n})]\]
+                        </div>
+
+                        <div class="highlight-box success">
+                            <h4>关键：\(a_{n:2n}\) 来自同一个trajectory！</h4>
+
+                            <p><strong>为什么unbiased？</strong></p>
+
+                            <p>期望的target：</p>
+                            <div class="math-block">
+                                \[\mathbb{E}[G_n + \gamma^n Q(s_n, a_{n:2n}) | s_0, a_{0:n}]\]
+                                \[= \mathbb{E}[\sum \gamma^k r_k | s_0, a_{0:n}] + \gamma^n \mathbb{E}[Q(s_n, a_{n:2n}) | s_0, a_{0:n}]\]
                             </div>
 
-                            <p><strong>2. 每个chunk的bias</strong>：</p>
+                            <p><strong>关键观察</strong>：</p>
+                            <ol>
+                                <li>\(s_n\) 是由 \(a_0, ..., a_{n-1}\) 决定的</li>
+                                <li>\(a_{n:2n}\) 来自dataset的同一条trajectory</li>
+                                <li>整个序列 \(a_0, ..., a_{2n-1}\) 是由同一个policy（或者同一个人类演示）生成的</li>
+                            </ol>
+
+                            <p><strong>Consistency</strong>：</p>
                             <div class="math-block">
-                                \[|\mathbb{E}[r_k] - \mathbb{E}[\hat{r}_k]| \leq R_{\max} \cdot \epsilon_h\]
+                                \[P(s_n | s_0, a_{0:n}) = P(s_n | s_0, a_0, ..., a_{n-1}) \text{  # 确定的}\]
                             </div>
 
-                            <p><strong>3. 累积所有chunks</strong>：</p>
+                            <p><strong>Bellman equation满足</strong>：</p>
                             <div class="math-block">
-                                \[\text{Bias} \leq \sum_{i} \gamma^{h \cdot i} \cdot R_{\max} \cdot \epsilon_h\]
-                                \[= R_{\max} \cdot \epsilon_h \cdot (1 + \gamma^h + \gamma^{2h} + ...)\]
-                                \[= R_{\max} \cdot \epsilon_h / (1-\gamma^h) = R_{\max} \cdot \epsilon_h \cdot \bar{H}\]
+                                \[Q(s_0, a_{0:n}) = \mathbb{E}[\sum \gamma^k r_k + \gamma^n Q(s_n, a_{n:2n}) | s_0, a_{0:n}, \text{trajectory} \sim D]\]
+                                <p>这正是Bellman consistency对于chunked Q的形式！</p>
+                            </div>
+                        </div>
+
+                        <h4>形式化</h4>
+
+                        <div class="math-block">
+                            <p>定义operator \(T\):</p>
+                            \[[TQ](s, a_{0:n}) = \mathbb{E}[\sum \gamma^k r_k + \gamma^n Q(s_n, a_{n:2n}) | s, a_{0:n}, \tau \sim D]\]
+                        </div>
+
+                        <div class="highlight-box primary">
+                            <h4>定理</h4>
+                            <p>\(Q^*\) 是\(T\)的不动点，且迭代\(Q^{(k+1)} = TQ^{(k)}\)收敛到\(Q^*\)</p>
+
+                            <p><strong>证明收敛性</strong>：</p>
+
+                            <p>1. <strong>Contraction</strong>:</p>
+                            <div class="math-block">
+                                \[\|TQ_1 - TQ_2\|_\infty \leq \gamma^n \cdot \|Q_1 - Q_2\|_\infty\]
                             </div>
 
-                            <p><strong>4. 考虑整个episode</strong>：</p>
-                            <div class="math-block">
-                                \[|V - \hat{V}| \leq H \cdot (R_{\max} \cdot \epsilon_h \cdot \bar{H}) = \epsilon_h \cdot H \cdot \bar{H}\]
-                            </div>
+                            <p>2. <strong>不动点唯一</strong>: 由Banach不动点定理</p>
+
+                            <p>3. <strong>Unbiased</strong>: 每次迭代是对\(TQ\)的无偏估计</p>
 
                             <p>∎</p>
                         </div>
                     </div>
-                </section>
+                </div>
 
-                <hr>
+                <h3>Theorem 1 (DQC Paper): Value Bias Bound</h3>
 
-                <section>
-                    <h2>总结：核心结论</h2>
+                <div class="highlight-box primary">
+                    <h4><span class="icon">📐</span> 定理：Open-loop execution的value bias有界</h4>
+                </div>
 
-                    <h3>Q-Chunking的核心结论</h3>
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        完整证明（展开）
+                    </div>
+                    <div class="collapsible-content">
+                        <h4>定义</h4>
 
-                    <div class="highlight-box success">
-                        <h4>1. "消除off-policy bias"</h4>
-                        <p><strong>为什么？</strong></p>
-                        <ul>
-                            <li>Q函数condition在<strong>exact action sequence</strong></li>
-                            <li>rewards由这些actions产生</li>
-                            <li>bootstrap用同一trajectory的下一个chunk</li>
-                            <li>→ 没有分布不匹配</li>
-                        </ul>
+                        <div class="math-block">
+                            <p><strong>Open-loop consistency</strong> (Definition 2):</p>
+                            <p>Dataset \(D\) 是 \(\epsilon_h\text{-open-loop consistent}\) 如果：</p>
+                            \[D_{TV}(P^D(s_{t+h} | s_t) \| P^D_\circ(s_{t+h} | s_t)) \leq \epsilon_h\]
+
+                            <p>其中：</p>
+                            <ul>
+                                <li>\(P^D\): dataset的边际状态分布</li>
+                                <li>\(P^D_\circ\): open-loop执行（不考虑中间action）的分布</li>
+                            </ul>
+                        </div>
+
+                        <div class="highlight-box primary">
+                            <h4>直观理解</h4>
+                            <p>"如果我在\(s_t\)规划h步actions，<br>
+                            h步后到达的状态\(s_{t+h}\)的分布，<br>
+                            应该接近dataset中'h步后'的状态分布"</p>
+                        </div>
+
+                        <h4>定理陈述</h4>
+
+                        <div class="math-block">
+                            <p>如果dataset是\(\epsilon_h\text{-open-loop consistent}\)，那么：</p>
+                            \[|V^{ac}(s_t) - \hat{V}^{ac}(s_t)| \leq \epsilon_h \cdot H \cdot \bar{H}\]
+
+                            <p>其中：</p>
+                            <ul>
+                                <li>\(V^{ac}\): actor-critic的真实value</li>
+                                <li>\(\hat{V}^{ac}\): 估计的value</li>
+                                <li>\(H = 1/(1-\gamma)\): 有效horizon</li>
+                                <li>\(\bar{H} = 1/(1-\gamma^h)\): chunked horizon</li>
+                            </ul>
+                        </div>
+
+                        <h4>证明思路</h4>
+
+                        <div class="math-block">
+                            <p>1. <strong>分解bias</strong>：</p>
+                            \[V^{ac} - \hat{V}^{ac} = \mathbb{E}[\sum_{k=0}^\infty \gamma^k (r_k^{\text{真实}} - r_k^{\text{估计}})]\]
+
+                            <p>2. <strong>每个chunk的bias</strong>：</p>
+                            \[|\mathbb{E}[r_k^{\text{真实}}] - \mathbb{E}[r_k^{\text{估计}}]| \leq R_{\max} \cdot \epsilon_h\]
+
+                            <p>3. <strong>累积所有chunks</strong>：</p>
+                            \[\text{总bias} \leq \sum_{\text{chunk}} \gamma^{h \cdot \text{chunk}} \cdot R_{\max} \cdot \epsilon_h\]
+                            \[= R_{\max} \cdot \epsilon_h \cdot (1 + \gamma^h + \gamma^{2h} + ...)\]
+                            \[= R_{\max} \cdot \epsilon_h / (1-\gamma^h)\]
+                            \[= R_{\max} \cdot \epsilon_h \cdot \bar{H}\]
+
+                            <p>4. <strong>考虑整个episode</strong>：</p>
+                            \[|V - \hat{V}| \leq H \cdot (R_{\max} \cdot \epsilon_h \cdot \bar{H}) = \epsilon_h \cdot H \cdot \bar{H}\]
+
+                            <p>∎</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <hr>
+
+            <section>
+                <h2>总结：为什么得出这些结论</h2>
+
+                <h3>Q-Chunking的核心结论</h3>
+
+                <div class="highlight-box success">
+                    <h4>1. "消除off-policy bias"</h4>
+                    <p><strong>为什么？</strong></p>
+                    <ul>
+                        <li>Q函数condition在<strong>exact action sequence</strong></li>
+                        <li>rewards由这些actions产生</li>
+                        <li>bootstrap用同一trajectory的下一个chunk</li>
+                        <li>→ 没有分布不匹配</li>
+                    </ul>
+                </div>
+
+                <div class="highlight-box success">
+                    <h4>2. "单步advantage就够"</h4>
+                    <p><strong>为什么？</strong></p>
+                    <ul>
+                        <li>\(Q(s, a_{0:h})\)已经evaluate了h步</li>
+                        <li>\(A = Q - V\)自然是h-step advantage</li>
+                        <li>不需要手动sum单步advantages</li>
+                    </ul>
+                </div>
+
+                <h3>DQC的核心结论</h3>
+
+                <div class="highlight-box primary">
+                    <h4>1. "Decouple chunk sizes"</h4>
+                    <p><strong>为什么？</strong></p>
+                    <ul>
+                        <li>大critic chunk (h=25) → 高效value learning</li>
+                        <li>小policy chunk (h_a=5) → 更responsive</li>
+                        <li>两者通过distillation连接</li>
+                    </ul>
+                </div>
+
+                <div class="highlight-box primary">
+                    <h4>2. "用Expectile Regression"</h4>
+                    <p><strong>为什么？</strong></p>
+                    <ul>
+                        <li>需要近似\(\max Q\)但不能遍历所有可能</li>
+                        <li>Expectile (\(\kappa \to 1\)) 近似max</li>
+                        <li>但κ=0.8平衡optimism和robustness</li>
+                    </ul>
+                </div>
+
+                <div class="highlight-box warning">
+                    <h4>3. "Open-loop consistency很重要"</h4>
+                    <p><strong>为什么？</strong></p>
+                    <ul>
+                        <li>如果environment高度随机</li>
+                        <li>Open-loop执行h步会drift</li>
+                        <li>Bias累积，性能下降</li>
+                        <li>→ 需要小chunk或closed-loop execution</li>
+                    </ul>
+                </div>
+            </section>
+
+            <hr>
+
+            <section>
+                <h2>直观总结：类比说明</h2>
+
+                <h3>Q-Chunking vs Traditional RL</h3>
+
+                <div class="comparison-container">
+                    <div class="comparison-box left">
+                        <h4>传统RL = 评估单个chess move</h4>
+                        <p>"我走这一步(\(a_t\))，然后假设后面按某个策略走"</p>
+                        <p><strong>→ 问题</strong>：但你dataset里后面可能是另一种走法！</p>
                     </div>
 
-                    <div class="highlight-box success">
-                        <h4>2. "单步advantage就够"</h4>
-                        <p><strong>为什么？</strong></p>
-                        <ul>
-                            <li>\(Q(s, a_{0:h})\)已经evaluate了h步</li>
-                            <li>\(A = Q - V\)自然是h-step advantage</li>
-                            <li>不需要手动sum单步advantages</li>
-                        </ul>
+                    <div class="comparison-box right">
+                        <h4>Q-Chunking = 评估一个opening sequence</h4>
+                        <p>"我走这5步(\(a_{t:t+5}\))，直接评估这5步的组合效果"</p>
+                        <p><strong>→ 正确</strong>：我评估的就是实际发生的5步</p>
+                    </div>
+                </div>
+
+                <h3>Single-step vs Multi-step Advantage</h3>
+
+                <div class="comparison-container">
+                    <div class="comparison-box left">
+                        <h4>误解</h4>
+                        <p>"Action chunking = 需要多步advantage计算"</p>
                     </div>
 
-                    <h3>DQC的核心结论</h3>
-
-                    <div class="highlight-box primary">
-                        <h4>1. "Decouple chunk sizes"</h4>
-                        <p><strong>为什么？</strong></p>
-                        <ul>
-                            <li>大critic chunk (h=25) → 高效value learning</li>
-                            <li>小policy chunk (h_a=5) → 更responsive</li>
-                            <li>两者通过distillation连接</li>
-                        </ul>
+                    <div class="comparison-box right">
+                        <h4>真相</h4>
+                        <p>Chunked Q = 已经是multi-step了</p>
+                        <div class="math-block">
+                            \[A(s, \text{chunk}) = Q(s, \text{chunk}) - V(s)\]
+                            \[= \text{"这个chunk vs policy的h-step优势"}\]
+                        </div>
                     </div>
+                </div>
 
-                    <div class="highlight-box primary">
-                        <h4>2. "用Expectile Regression"</h4>
-                        <p><strong>为什么？</strong></p>
-                        <ul>
-                            <li>需要近似\(\max Q\)但不能遍历所有可能</li>
-                            <li>Expectile (\(\kappa \to 1\)) 近似max</li>
-                            <li>但κ=0.8平衡optimism和robustness</li>
-                        </ul>
-                    </div>
+                <div class="highlight-box primary">
+                    <h4>类比：评估一部电影前10分钟</h4>
 
-                    <div class="highlight-box warning">
-                        <h4>3. "Open-loop consistency很重要"</h4>
-                        <p><strong>为什么？</strong></p>
-                        <ul>
-                            <li>如果environment高度随机</li>
-                            <li>Open-loop执行h步会drift</li>
-                            <li>Bias累积，性能下降</li>
-                            <li>→ 需要小chunk或closed-loop execution</li>
-                        </ul>
-                    </div>
+                    <p><strong>不需要</strong>：</p>
+                    <p>"第1分钟advantage + 第2分钟advantage + ... + 第10分钟advantage"</p>
 
-                    <h3>直观类比总结</h3>
+                    <p><strong>只需要</strong>：</p>
+                    <p>"前10分钟整体质量 - 平均电影前10分钟质量"</p>
+                </div>
+
+                <h3>Decoupled Chunking</h3>
+
+                <div class="highlight-box success">
+                    <h4>类比：规划旅行</h4>
 
                     <div class="comparison-container">
                         <div class="comparison-box left">
-                            <h4>传统RL</h4>
-                            <p>"评估单个chess move"</p>
-                            <p><strong>→ 问题</strong>：后面可能是另一种走法！</p>
+                            <h4>Q-Chunking</h4>
+                            <p>"我计划5天行程，也只能预定5天酒店"</p>
                         </div>
 
                         <div class="comparison-box right">
-                            <h4>Q-Chunking</h4>
-                            <p>"评估一个opening sequence"</p>
-                            <p><strong>→ 正确</strong>：评估实际发生的sequence</p>
+                            <h4>DQC</h4>
+                            <p>"我计划25天行程(critic看得远)，<br>
+                            但只预定前5天酒店(policy保持灵活)"</p>
                         </div>
                     </div>
 
-                    <div class="highlight-box primary" style="margin-top: 3rem;">
-                        <h4>希望这个完整指南能帮你深入理解RL-100和Action Chunking！</h4>
-                        <ol>
-                            <li><strong>Part 1</strong>: RL-100算法概述 - 理解算法框架</li>
-                            <li><strong>Part 2</strong>: 实现中的问题 - 明确技术难点</li>
-                            <li><strong>Part 3</strong>: 深度理论分析 - 掌握理论基础</li>
-                        </ol>
-                        <p><strong>核心要点</strong>：Off-policy bias来自分布不匹配，Chunked Q通过evaluate exact
-                            sequences消除这个问题，单步advantage足够因为Q已经包含multi-step信息，Decouple让critic和policy各司其职。</p>
-                    </div>
-                </section>
+                    <p><strong>灵活性更高！</strong>如果前5天后情况变化，可以重新规划后20天。</p>
+                </div>
             </section>
+
+            <hr>
+
+            <div class="highlight-box primary">
+                <h4>希望这个深度解析能帮你理解为什么论文得出这些结论！核心就是：</h4>
+                <ol>
+                    <li><strong>Off-policy bias来自分布不匹配</strong></li>
+                    <li><strong>Chunked Q通过evaluate exact sequences消除这个问题</strong></li>
+                    <li><strong>单步advantage足够因为Q已经包含multi-step信息</strong></li>
+                    <li><strong>Decouple让critic和policy各司其职</strong></li>
+                </ol>
+            </div>
         </main>
     </div>
 
@@ -1729,14 +1760,13 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
             hljs.highlightAll();
         });
 
-        // Smooth scrolling for TOC links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
+        // Smooth scrolling and active TOC link
+        document.querySelectorAll('.toc-link').forEach(link => {
+            link.addEventListener('click', function(e) {
                 e.preventDefault();
-                const targetId = this.getAttribute('href');
-                if (targetId === '#') return;
+                const targetId = this.getAttribute('href').substring(1);
+                const targetElement = document.getElementById(targetId);
 
-                const targetElement = document.querySelector(targetId);
                 if (targetElement) {
                     const headerOffset = 100;
                     const elementPosition = targetElement.getBoundingClientRect().top;
@@ -1746,18 +1776,77 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
                         top: offsetPosition,
                         behavior: 'smooth'
                     });
+                }
+
+                // Update active link
+                document.querySelectorAll('.toc-link').forEach(l => l.classList.remove('active'));
+                this.classList.add('active');
+
+                // Close mobile menu
+                if (window.innerWidth <= 768) {
+                    document.getElementById('sidebar').classList.remove('mobile-open');
+                }
+            });
+        });
+
+        // Update active TOC link on scroll
+        window.addEventListener('scroll', () => {
+            const sections = document.querySelectorAll('section[id]');
+            let currentSection = '';
+
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop - 150;
+                if (window.pageYOffset >= sectionTop) {
+                    currentSection = section.getAttribute('id');
+                }
+            });
+
+            document.querySelectorAll('.toc-link').forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + currentSection) {
+                    link.classList.add('active');
+                }
+            });
+        });
+
+        </main>
+    </div>
+
+    <script>
+        // Syntax highlighting
+        document.addEventListener("DOMContentLoaded", (event) => {
+            hljs.highlightAll();
+        });
+
+        // Smooth scrolling for TOC links
+        document.querySelectorAll("a[href^=\"#\"]").forEach(anchor => {
+            anchor.addEventListener("click", function (e) {
+                e.preventDefault();
+                const targetId = this.getAttribute("href");
+                if (targetId === "#") return;
+
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    const headerOffset = 100;
+                    const elementPosition = targetElement.getBoundingClientRect().top;
+                    const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+                    window.scrollTo({
+                        top: offsetPosition,
+                        behavior: "smooth"
+                    });
 
                     // Update active link
-                    document.querySelectorAll('.toc-link').forEach(link => {
-                        link.classList.remove('active');
+                    document.querySelectorAll(".toc-link").forEach(link => {
+                        link.classList.remove("active");
                     });
-                    if (this.classList.contains('toc-link')) {
-                        this.classList.add('active');
+                    if (this.classList.contains("toc-link")) {
+                        this.classList.add("active");
                     }
 
                     // Close mobile menu
                     if (window.innerWidth <= 768) {
-                        document.getElementById('sidebar').classList.remove('mobile-open');
+                        document.getElementById("sidebar").classList.remove("mobile-open");
                     }
                 }
             });
@@ -1765,23 +1854,23 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
 
         // Update active TOC link on scroll
         let scrollTimeout;
-        window.addEventListener('scroll', () => {
+        window.addEventListener("scroll", () => {
             clearTimeout(scrollTimeout);
             scrollTimeout = setTimeout(() => {
-                const sections = document.querySelectorAll('section[id]');
-                let currentSection = '';
+                const sections = document.querySelectorAll("section[id]");
+                let currentSection = "";
 
                 sections.forEach(section => {
                     const sectionTop = section.offsetTop - 150;
                     if (window.pageYOffset >= sectionTop) {
-                        currentSection = section.getAttribute('id');
+                        currentSection = section.getAttribute("id");
                     }
                 });
 
-                document.querySelectorAll('.toc-link').forEach(link => {
-                    link.classList.remove('active');
-                    if (link.getAttribute('href') === '#' + currentSection) {
-                        link.classList.add('active');
+                document.querySelectorAll(".toc-link").forEach(link => {
+                    link.classList.remove("active");
+                    if (link.getAttribute("href") === "#" + currentSection) {
+                        link.classList.add("active");
                     }
                 });
             }, 100);
@@ -1789,26 +1878,26 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
 
         // Collapsible sections
         function toggleCollapsible(header) {
-            header.classList.toggle('active');
+            header.classList.toggle("active");
             const content = header.nextElementSibling;
-            content.classList.toggle('active');
+            content.classList.toggle("active");
         }
 
         // Mobile menu toggle
         function toggleMenu() {
-            document.getElementById('sidebar').classList.toggle('mobile-open');
+            document.getElementById("sidebar").classList.toggle("mobile-open");
         }
 
         // Close mobile menu when clicking outside
-        document.addEventListener('click', (e) => {
-            const sidebar = document.getElementById('sidebar');
-            const menuToggle = document.querySelector('.menu-toggle');
+        document.addEventListener("click", (e) => {
+            const sidebar = document.getElementById("sidebar");
+            const menuToggle = document.querySelector(".menu-toggle");
 
             if (window.innerWidth <= 768 &&
                 !sidebar.contains(e.target) &&
                 !menuToggle.contains(e.target) &&
-                sidebar.classList.contains('mobile-open')) {
-                sidebar.classList.remove('mobile-open');
+                sidebar.classList.contains("mobile-open")) {
+                sidebar.classList.remove("mobile-open");
             }
         });
     </script>
