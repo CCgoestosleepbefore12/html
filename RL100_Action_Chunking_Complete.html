@@ -1083,12 +1083,12 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                         <h4><span class="icon">✓</span> 为什么无bias？</h4>
                         <p>因为：</p>
                         <div class="math-block">
-                            \[Q(s_0, a_{0:n})\]
-                            <p>的定义就是："从\(s_0\)开始，执行\(a_0, a_1, ..., a_{n-1}\)，然后评估后续价值"</p>
+                            \[Q(s_0, a_{0:n}) \text{ 的定义就是：}\]
+                            \[\text{"从}s_0\text{开始，执行}a_0, a_1, ..., a_{n-1}\text{，然后评估后续价值"}\]
                             <br>
-                            <p>而 \(G_n\) 正是执行这些actions得到的实际return！</p>
+                            \[\text{而 } G_n \text{ 正是执行这些actions得到的实际return！}\]
                             <br>
-                            <p>所以：\(\mathbb{E}[G_n | s_0, a_{0:n}]\) 就是\(Q(s_0, a_{0:n})\)的unbiased估计</p>
+                            \[\text{所以：}\mathbb{E}[G_n | s_0, a_{0:n}] \text{ 就是}Q(s_0, a_{0:n})\text{的unbiased估计}\]
                         </div>
                     </div>
 
@@ -1097,17 +1097,15 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
                     <div class="comparison-container">
                         <div class="comparison-box left">
                             <h4>传统Q函数（局部）</h4>
-                            <p>"我只看第一步action a，然后假设后续按某个policy走"</p>
                             <div class="math-block">
-                                \[Q(s, a)\]
+                                \[Q(s, a) = \text{"我只看第一步action } a\text{，然后假设后续按某个policy走"}\]
                             </div>
                         </div>
 
                         <div class="comparison-box right">
                             <h4>Chunked Q函数（整体）</h4>
-                            <p>"我看整个h步action sequence，直接评估这个sequence的价值"</p>
                             <div class="math-block">
-                                \[Q(s, a_{0:h})\]
+                                \[Q(s, a_{0:h}) = \text{"我看整个h步action sequence，直接评估这个sequence的价值"}\]
                             </div>
                         </div>
                     </div>
@@ -1145,11 +1143,10 @@ Q(s_0, a_{0:n}) ← G_n + γⁿ * Q(s_n, a_{n:2n})
 
                     <div class="highlight-box warning">
                         <h4><span class="icon">🤔</span> 很多人看到action chunking后会想</h4>
-                        <p>"既然我用h-step actions，是不是也需要h-step advantage？"</p>
+                        <p>"既然我用h-step actions，<br>
+                        是不是也需要h-step advantage？"</p>
                         <div class="math-block">
-                            <p>比如：</p>
-                            \[A_h(s, a_{0:h}) = \sum \gamma^t (r_t - V(s_t))\]
-                            <p>h步advantage？</p>
+                            \[A_h(s, a_{0:h}) = \sum \gamma^t (r_t - V(s_t)) \text{  # h步advantage？}\]
                         </div>
                     </div>
 
@@ -1304,11 +1301,11 @@ for step in range(0, 500, 5):
 
                     <div class="highlight-box success">
                         <h4>如果能用更大的critic chunk (h=25)</h4>
-                        <pre><code class="language-python"># critic可以"看得更远"，一次bootstrap 25步</code></pre>
-                        <div class="math-block">
-                            \[Q(s_t, a_{t:t+25}) = \sum \gamma^k r_k + \gamma^{25} Q(s_{t+25}, ...)\]
-                            <p>25步的rewards，更高效的value learning</p>
-                        </div>
+                        <pre><code class="language-python"># critic可以"看得更远"，一次bootstrap 25步
+Q(s_t, a_{t:t+25}) = Σγᵏr_k + γ²⁵*Q(s_{t+25}, ...)
+#                      ↑
+#                   25步的rewards
+#                   更高效的value learning</code></pre>
                     </div>
 
                     <h4>问题2：Policy reactivity不足</h4>
@@ -1509,14 +1506,12 @@ q_values = [Q_full(s, [a_{0:5}, a_{5:25}^i]) for i in 1..N]
 
                                 <p><strong>Consistency</strong>：</p>
                                 <div class="math-block">
-                                    \[P(s_n | s_0, a_{0:n}) = P(s_n | s_0, a_0, ..., a_{n-1})\]
-                                    <p>(确定的)</p>
+                                    \[P(s_n | s_0, a_{0:n}) = P(s_n | s_0, a_0, ..., a_{n-1}) \text{  # 确定的}\]
                                 </div>
 
                                 <p><strong>Bellman equation满足</strong>：</p>
                                 <div class="math-block">
-                                    \[Q(s_0, a_{0:n}) = \mathbb{E}[\sum \gamma^k r_k + \gamma^n Q(s_n, a_{n:2n}) | s_0,
-                                    a_{0:n}, \text{trajectory} \sim D]\]
+                                    \[Q(s_0, a_{0:n}) = \mathbb{E}[\sum \gamma^k r_k + \gamma^n Q(s_n, a_{n:2n}) | s_0, a_{0:n}, \text{trajectory} \sim D]\]
                                     <p>这正是Bellman consistency对于chunked Q的形式！</p>
                                 </div>
                             </div>
